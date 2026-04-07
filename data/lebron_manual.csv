@@ -1,0 +1,183 @@
+Player,Team,Offensive Archetype,Age,Exp,GP,Minutes,MPG,LEBRON,O-LEBRON,D-LEBRON,LEBRON WAR
+A'ja Wilson,LVA,Post Scorer,29,7,48,1535,32,7.02,3.62,3.4,8.2
+Breanna Stewart,NYL,Roll + Cut Big,31,8,34,1043,30.7,4.84,2.7,2.14,4.3
+Veronica Burton,GSV,Ball Handler,25,3,46,1362,29.6,3.99,2.14,1.85,4.9
+Napheesa Collier,MIN,Post Scorer,29,6,39,1273,32.6,3.93,2.59,1.35,4.5
+Aliyah Boston,IND,Post Scorer,23,2,53,1612,30.4,3.92,2.05,1.87,5.8
+Allisha Gray,ATL,Shooter,30,8,45,1550,34.4,3.62,3.03,0.59,5.2
+Alyssa Thomas,PHO,Roll + Cut Big,33,11,46,1477,32.1,3.34,1.63,1.71,4.8
+Rhyne Howard,ATL,Shooter,25,3,36,1256,34.9,3.14,2.81,0.33,3.9
+Courtney Williams,MIN,Ball Handler,31,9,51,1489,29.2,3.07,0.99,2.08,4.6
+Satou Sabally,PHO,Stretch Big,27,5,46,1275,27.7,3.03,1.74,1.3,3.9
+Brionna Jones,ATL,Post Scorer,29,8,47,1254,26.7,2.97,1.84,1.13,3.8
+Alanna Smith,MIN,Shooter,29,6,49,1286,26.2,2.69,0.75,1.94,3.7
+Sabrina Ionescu,NYL,Athletic Finisher,27,5,41,1300,31.7,2.54,2.86,-0.31,3.6
+Jackie Young,LVA,Ball Handler,28,6,52,1616,31.1,2.26,2.42,-0.16,4.2
+Jonquel Jones,NYL,Versatile Big,31,8,34,919,27,2.24,1.02,1.22,2.4
+Kelsey Mitchell,IND,Athletic Finisher,29,7,53,1675,31.6,2.18,2.29,-0.11,4.2
+Jordin Canada,ATL,Ball Handler,30,7,31,864,27.9,2.09,1.04,1.05,2.1
+Natasha Mack,PHO,Roll + Cut Big,27,2,41,732,17.9,1.96,-0.64,2.6,1.8
+Kayla McBride,MIN,Shooter,33,11,46,1476,32.1,1.96,1.56,0.4,3.5
+Dearica Hamby,LAS,Roll + Cut Big,31,10,44,1374,31.2,1.77,1.95,-0.18,3.1
+Brittney Sykes,SEA,Athletic Finisher,31,8,42,1260,30,1.73,0.84,0.89,2.9
+Gabby Williams,SEA,Shooter,29,6,47,1482,31.5,1.67,0.06,1.61,3.3
+Chelsea Gray,LVA,Shooter,32,10,52,1646,31.7,1.63,1.43,0.21,3.6
+Maria Kliundikova,MIN,Roll + Cut Big,27,2,40,430,10.7,1.52,-0.33,1.85,0.9
+Kayla Thornton,GSV,Shooter,32,9,22,662,30.1,1.47,0.82,0.65,1.4
+Naz Hillmon,ATL,Athletic Finisher,25,3,47,1223,26,1.47,0.61,0.86,2.6
+Emily Engstler,WAS,Shooter,25,3,40,512,12.8,1.43,0.25,1.18,1.1
+Cameron Brink,LAS,Stretch Big,23,1,19,244,12.9,1.37,-1.46,2.84,0.5
+Nneka Ogwumike,SEA,Stretch Big,35,13,47,1451,30.9,1.35,1.55,-0.2,3
+Nia Coffey,ATL,Shooter,30,8,47,471,10,1.35,0.44,0.91,1
+Paige Bueckers,DAL,Athletic Finisher,23,R,36,1199,33.3,1.35,1.68,-0.33,2.4
+Skylar Diggins,SEA,Ball Handler,35,10,46,1440,31.3,1.23,1.54,-0.31,2.8
+Courtney Vandersloot,CHI,Ball Handler,36,14,7,191,27.2,1.22,-0.05,1.27,0.4
+Natasha Howard,IND,Post Scorer,34,11,53,1291,24.4,1.18,0.21,0.97,2.5
+NaLyssa Smith,LVA,Roll + Cut Big,25,3,53,1157,21.8,1.12,-0.61,1.73,2.2
+Ezi Magbegor,SEA,Roll + Cut Big,26,5,47,1277,27.2,1.1,-1.19,2.29,2.4
+Julie Allemand,LAS,Shooter,29,2,34,963,28.3,1.1,0.81,0.29,1.8
+Caitlin Clark,IND,Ball Handler,23,1,13,404,31,1.1,2.03,-0.93,0.8
+LeÃ¯la Lacan,CON,Ball Handler,21,R,25,665,26.6,1.05,0.35,0.71,1.2
+Angel Reese,CHI,Post Scorer,23,1,30,939,31.3,1.05,0.8,0.25,1.7
+Monique Billings,GSV,Roll + Cut Big,29,7,28,503,18,0.93,-0.72,1.65,0.9
+Azura Stevens,LAS,Athletic Finisher,29,7,44,"1,249",28.4,0.92,1.45,-0.52,2.2
+Kelsey Plum,LAS,Ball Handler,31,7,43,"1,508",35.1,0.89,2.88,-1.98,2.6
+Lexie Hull,IND,Athletic Finisher,26,3,53,"1,472",27.8,0.85,0.21,0.64,2.6
+Laeticia Amihere,GSV,Athletic Finisher,24,2,30,389,13,0.64,0.01,0.63,0.6
+Jessica Shepard,MIN,Roll + Cut Big,29,4,47,955,20.3,0.6,0.51,0.08,1.5
+Kaila Charles,GSV,Shooter,27,4,37,662,17.9,0.52,0.08,0.45,1
+Natasha Cloud,NYL,Ball Handler,33,9,44,"1,294",29.4,0.45,-0.21,0.65,1.9
+Temi FÃ¡gbÃ©nlÃ©,GSV,Roll + Cut Big,33,4,40,945,23.6,0.39,-1.52,1.92,1.4
+Monique Akoa Makani,PHO,Shooter,24,R,48,"1,043",21.7,0.38,-0.3,0.68,1.5
+Natisha Hiedeman,MIN,Shooter,28,6,51,973,19.1,0.33,1.21,-0.89,1.4
+Aari McDonald,IND,Shooter,27,4,21,550,26.2,0.2,0.38,-0.17,0.7
+Kathryn Westbeld,PHO,Shooter,29,R,50,876,17.5,0.18,-0.94,1.12,1.2
+Kiki Iriafen,WAS,Post Scorer,22,R,44,"1,185",26.9,0.15,-0.55,0.7,1.6
+Ariel Atkins,CHI,Ball Handler,29,7,34,970,28.5,0.12,0.42,-0.3,1.3
+Odyssey Sims,IND,Athletic Finisher,33,11,32,906,28.3,0.12,-0.38,0.5,1.2
+Dominique Malonga,SEA,Post Scorer,19,R,45,668,14.9,0.1,-0.88,0.98,0.9
+Bridget Carleton,MIN,Shooter,28,6,51,"1,425",27.9,0.1,-0.94,1.04,1.8
+Makayla Timpson,IND,Post Scorer,23,R,40,280,7,0.09,-1.29,1.37,0.4
+Sami Whitcomb,PHO,Athletic Finisher,37,8,50,"1,202",24,0.07,0.06,0.02,1.5
+Olivia Nelson-Ododa,CON,Post Scorer,25,3,37,800,21.6,0.07,-1.77,1.84,1
+Tiffany Hayes,GSV,Ball Handler,36,12,26,700,26.9,0.07,0.31,-0.25,0.9
+Rae Burrell,LAS,Shooter,25,3,28,515,18.4,-0.06,0.32,-0.38,0.6
+Maya Caldwell,ATL,Shooter,26,3,44,801,18.2,-0.1,-0.35,0.25,0.9
+Grace Berger,DAL,Athletic Finisher,26,2,19,418,22,-0.27,-0.91,0.64,0.4
+Haley Jones,DAL,Athletic Finisher,24,2,28,594,21.2,-0.29,-0.91,0.62,0.6
+Cecilia Zandalasini,GSV,Shooter,29,3,21,512,24.4,-0.29,-0.07,-0.22,0.5
+Amy Okonkwo,DAL,Low Minute,29,R,8,157,19.6,-0.34,0.24,-0.59,0.2
+Jewell Loyd,LVA,Shooter,31,10,52,"1,471",28.3,-0.39,0.37,-0.76,1.4
+Nyara Sabally,NYL,Roll + Cut Big,25,2,18,312,17.3,-0.4,-1.15,0.75,0.3
+Emma Meesseman,NYL,Post Scorer,32,8,20,480,24,-0.55,0.16,-0.7,0.4
+Shakira Austin,WAS,Post Scorer,25,3,38,874,23,-0.56,-1.7,1.14,0.8
+Kalani Brown,PHO,Post Scorer,28,5,30,374,12.5,-0.61,-1.49,0.87,0.3
+Myisha Hines-Allen,DAL,Roll + Cut Big,30,7,40,882,22.1,-0.62,-0.87,0.25,0.7
+DeWanna Bonner,PHO,Athletic Finisher,38,15,40,951,23.8,-0.62,-0.91,0.29,0.8
+Teaira McCowan,FA,Post Scorer,29,6,17,219,12.9,-0.63,-1.13,0.49,0.2
+Kamilla Cardoso,CHI,Post Scorer,24,1,40,"1,106",27.6,-0.65,-0.05,-0.6,0.9
+Aerial Powers,IND,Shooter,31,9,18,250,13.9,-0.67,-0.54,-0.13,0.2
+Aaliyah Edwards,CON,Roll + Cut Big,23,1,36,534,14.8,-0.72,-1,0.28,0.4
+Luisa Geiselsoder,DAL,Stretch Big,25,R,28,628,22.4,-0.76,-1.59,0.83,0.5
+Iliana Rupert,GSV,Shooter,24,2,23,535,23.3,-0.79,-0.36,-0.43,0.4
+Aneesah Morrow,CON,Versatile Big,22,R,41,775,18.9,-0.83,-0.13,-0.7,0.6
+Brianna Turner,IND,Roll + Cut Big,29,6,36,376,10.4,-0.97,-2.42,1.45,0.2
+Moriah Jefferson,FA,Low Minute,31,8,5,35,7.1,-1.02,-1.62,0.6,0
+Te-Hina Paopao,ATL,Shooter,23,R,46,749,16.3,-1.04,-0.49,-0.55,0.4
+Isabelle Harrison,NYL,Post Scorer,32,7,35,367,10.5,-1.09,-0.41,-0.68,0.2
+Erica Wheeler,SEA,Ball Handler,34,9,47,"1,206",25.7,-1.1,-0.46,-0.63,0.7
+Emma Cannon,LAS,Athletic Finisher,36,6,21,213,10.1,-1.15,-1.05,-0.1,0.1
+Maddy Siegrist,DAL,Athletic Finisher,25,2,26,702,27,-1.16,0.95,-2.11,0.4
+Rebekah Gardner,NYL,Athletic Finisher,35,2,44,517,11.8,-1.28,-1.07,-0.21,0.2
+Brittney Griner,ATL,Post Scorer,34,11,42,842,20,-1.34,-1.41,0.08,0.3
+Leonie Fiebich,NYL,Athletic Finisher,25,1,40,"1,132",28.3,-1.35,-1.43,0.08,0.4
+Li Yueru,DAL,Versatile Big,26,2,31,520,16.8,-1.35,-0.37,-0.98,0.2
+Janelle SalaÃ¼n,GSV,Shooter,24,R,38,"1,042",27.4,-1.36,-0.43,-0.93,0.4
+Kate Martin,GSV,Shooter,25,1,44,719,16.3,-1.37,0.07,-1.44,0.3
+Marine Johannes,NYL,Shooter,30,3,45,813,18.1,-1.39,0.17,-1.56,0.3
+Arike Ogunbowale,DAL,Shooter,28,6,29,966,33.3,-1.43,0.54,-1.97,0.3
+Chloe Bibby,IND,Low Minute,27,R,14,154,11,-1.51,-0.94,-0.58,0
+Robyn Parks,FA,Low Minute,33,1,6,63,10.5,-1.55,-1.77,0.22,0
+DiJonai Carrington,MIN,Athletic Finisher,27,4,33,706,21.4,-1.55,-0.9,-0.66,0.2
+Kierstan Bell,LVA,Shooter,25,3,43,518,12,-1.56,-0.6,-0.96,0.1
+Sophie Cunningham,IND,Shooter,29,6,31,782,25.2,-1.57,-1.35,-0.23,0.2
+Rayah Marshall,CON,Low Minute,21,R,15,90,6,-1.62,-1.77,0.15,0
+Lexie Brown,SEA,Shooter,30,7,25,233,9.3,-1.64,-0.94,-0.71,0.1
+Tyasha Harris,DAL,Low Minute,27,5,5,82,16.5,-1.65,-1.52,-0.13,0
+JJ Quinerly,DAL,Ball Handler,22,R,34,539,15.9,-1.7,-1.03,-0.67,0.1
+Carla Leite,GSV,Ball Handler,21,R,39,653,16.7,-1.71,-0.96,-0.74,0.1
+Maddy Westbeld,CHI,Stretch Big,23,R,26,362,13.9,-1.74,-1.64,-0.09,0.1
+Stefanie Dolson,WAS,Shooter,33,11,43,653,15.2,-1.74,-2.17,0.43,0.1
+Sonia Citron,WAS,Athletic Finisher,21,R,44,"1,415",32.1,-1.79,-1.32,-0.47,0.2
+Kahleah Copper,PHO,Athletic Finisher,31,9,35,990,28.3,-1.83,-0.53,-1.31,0.1
+Elizabeth Williams,CHI,Post Scorer,32,10,43,903,21,-1.87,-1.32,-0.55,0.1
+Madison Scott,WAS,Low Minute,23,R,9,47,5.2,-1.91,-1.75,-0.16,0
+Bree Hall,IND,Low Minute,22,R,8,25,3.2,-2.02,-1.29,-0.74,0
+Aziaha James,DAL,Shooter,22,R,38,673,17.7,-2.1,-0.16,-1.94,0
+Marina Mabrey,CON,Ball Handler,29,6,35,"1,103",31.5,-2.11,-0.08,-2.02,-0.1
+Rickea Jackson,LAS,Shooter,24,1,38,"1,173",30.9,-2.13,-0.14,-1.99,-0.1
+Saniya Rivers,CON,Ball Handler,22,R,42,"1,097",26.1,-2.15,-1.13,-1.02,-0.1
+Kiah Stokes,LVA,Stretch Big,32,9,46,525,11.4,-2.15,-3.33,1.18,-0.1
+Sug Sutton,WAS,Ball Handler,26,3,43,"1,122",26.1,-2.22,-1.89,-0.33,-0.2
+Stephanie Talbot,NYL,Shooter,31,6,39,549,14.1,-2.24,-1.64,-0.6,-0.1
+Haley Peters,CON,Stretch Big,33,3,33,380,11.5,-2.25,-1.78,-0.47,-0.1
+Kyara Linskens,FA,Low Minute,28,R,4,27,6.7,-2.27,-1.81,-0.46,0
+Alysha Clark,WAS,Athletic Finisher,38,12,42,828,19.7,-2.28,-2.16,-0.13,-0.1
+Marquesha Davis,FA,Low Minute,24,1,11,52,4.7,-2.3,-1.76,-0.54,0
+Kyra Lambert,FA,Low Minute,28,R,1,0,0.1,-2.35,-1.27,-1.08,0
+Ajae Petty,DAL,Low Minute,23,R,2,6,3.2,-2.4,-1.79,-0.61,0
+Shatori Walker-Kimbrough,ATL,Shooter,30,8,43,360,8.4,-2.43,-2.74,0.31,-0.1
+Shey Peddy,IND,Shooter,36,5,23,394,17.1,-2.43,-1.52,-0.91,-0.1
+Julie Vanloo,LAS,Shooter,32,1,35,449,12.8,-2.46,-1.71,-0.75,-0.1
+Serena Sundell,FA,Low Minute,23,R,3,22,7.2,-2.49,-1.87,-0.61,0
+Alexis Prince,FA,Low Minute,31,3,1,22,22.1,-2.54,-1.83,-0.72,0
+Mercedes Russell,FA,Low Minute,30,7,20,163,8.2,-2.56,-2.78,0.22,-0.1
+Sika KonÃ©,ATL,Low Minute,23,2,21,88,4.2,-2.58,-2.23,-0.35,0
+Sania Feagin,LAS,Low Minute,22,R,16,77,4.8,-2.59,-2.32,-0.28,0
+Kiana Williams,PHO,Low Minute,26,3,12,110,9.1,-2.61,-1.37,-1.23,0
+Sevgi Uzun,CHI,Ball Handler,27,1,25,440,17.6,-2.64,-1.89,-0.75,-0.2
+Christyn Williams,DAL,Low Minute,25,R,4,45,11.2,-2.66,-1.89,-0.78,0
+Megan McConnell,FA,Low Minute,23,R,1,13,12.6,-2.73,-1.63,-1.1,0
+Hailey Van Lith,CHI,Ball Handler,24,R,29,361,12.4,-2.73,-2.08,-0.65,-0.2
+Damiris Dantas,IND,Versatile Big,32,9,38,439,11.5,-2.74,-0.67,-2.07,-0.2
+Kariata Diaby,FA,Low Minute,30,R,13,103,8,-2.78,-2.7,-0.08,-0.1
+Lucy Olsen,WAS,Athletic Finisher,22,R,41,508,12.4,-2.8,-1.06,-1.74,-0.2
+Kennedy Burke,NYL,Shooter,28,5,39,832,21.3,-2.82,-1.27,-1.54,-0.4
+Mamignan TourÃ©,CON,Low Minute,30,R,18,147,8.2,-2.82,-2.26,-0.56,-0.1
+Karlie Samuelson,FA,Shooter,30,6,16,228,14.2,-2.85,-1.68,-1.17,-0.1
+Tina Charles,CON,Post Scorer,36,13,43,"1,222",28.4,-2.86,-0.31,-2.55,-0.6
+Murjanatu Musa,FA,Low Minute,25,R,12,122,10.1,-2.92,-1.65,-1.27,-0.1
+Liatu King,FA,Low Minute,23,R,14,136,9.7,-2.97,-2.15,-0.81,-0.1
+Sarah Ashlee Barker,LAS,Shooter,24,R,34,481,14.1,-3.02,-2.39,-0.64,-0.3
+Sydney Colson,IND,Ball Handler,36,10,31,425,13.7,-3.04,-2.65,-0.4,-0.3
+Jaelyn Brown,FA,Low Minute,26,1,10,131,13.1,-3.06,-2.41,-0.65,-0.1
+Lexi Held,PHO,Ball Handler,25,R,33,475,14.4,-3.08,-1.77,-1.31,-0.3
+Rebecca Allen,CHI,Athletic Finisher,32,9,44,821,18.7,-3.1,-2.46,-0.64,-0.6
+Kamiah Smalls,FA,Low Minute,27,2,3,3,1.1,-3.11,-1.71,-1.39,0
+Michaela Onyenwere,CHI,Shooter,26,4,42,711,16.9,-3.11,-2.37,-0.74,-0.5
+Jacy Sheldon,WAS,Shooter,25,1,30,708,23.6,-3.12,-1.48,-1.64,-0.5
+Diamond Miller,DAL,Athletic Finisher,24,2,41,435,10.6,-3.15,-1.8,-1.35,-0.3
+Dana Evans,LVA,Ball Handler,27,4,52,925,17.8,-3.15,-0.65,-2.5,-0.6
+Taylor Thierry,ATL,Low Minute,22,R,18,38,2.1,-3.16,-2.02,-1.14,0
+Bria Hartley,CON,Ball Handler,32,9,38,867,22.8,-3.19,-1.17,-2.02,-0.6
+Kitija Laksa,PHO,Shooter,29,R,34,631,18.6,-3.2,-1.45,-1.75,-0.5
+Lindsay Allen,CON,Ball Handler,30,7,31,450,14.5,-3.24,-2.06,-1.18,-0.3
+Megan Gustafson,LVA,Shooter,28,6,26,285,11,-3.24,-1.77,-1.47,-0.2
+Jade Melbourne,WAS,Shooter,23,2,43,"1,008",23.4,-3.27,-2.26,-1.02,-0.8
+Joyner Holmes,FA,Low Minute,27,5,6,29,4.8,-3.4,-1.82,-1.58,0
+Rachel Banham,CHI,Shooter,32,9,44,"1,081",24.6,-3.41,-1.19,-2.22,-0.9
+Aaliyah Nye,LVA,Shooter,23,R,47,681,14.5,-3.42,-1.62,-1.81,-0.6
+Jaylyn Sherrod,MIN,Low Minute,23,1,28,147,5.2,-3.45,-2.28,-1.17,-0.1
+Crystal Bradford,FA,Low Minute,31,2,4,24,6,-3.46,-1.71,-1.74,0
+Kaitlyn Chen,GSV,Shooter,23,R,25,251,10,-3.46,-2.34,-1.13,-0.2
+Anastasiia Kosu,MIN,Low Minute,20,R,25,88,3.5,-3.49,-1.6,-1.89,-0.1
+Alissa Pili,LAS,Low Minute,24,1,20,100,5,-3.63,-2.19,-1.44,-0.1
+Cheyenne Parker-Tyus,LVA,Low Minute,33,10,7,49,6.9,-3.75,-1.83,-1.92,-0.1
+Yvonne Anderson,FA,Low Minute,35,1,1,12,12.4,-3.8,-1.87,-1.93,0
+Tiffany Mitchell,SEA,Shooter,31,9,40,521,13,-3.83,-2.97,-0.87,-0.6
+Camryn Taylor,MIN,Low Minute,25,R,8,26,3.3,-3.86,-1.9,-1.97,0
+MariÃ¨me Badiane,FA,Low Minute,30,R,3,11,3.6,-3.92,-1.89,-2.04,0
+Mackenzie Holmes,SEA,Low Minute,24,R,11,63,5.8,-4.23,-2.73,-1.5,-0.1
+Kia Nurse,CHI,Shooter,29,6,44,962,21.9,-4.37,-1.79,-2.58,-1.3
+Elizabeth Kitley,FA,Low Minute,24,R,12,98,8.2,-4.58,-3.54,-1.04,-0.2
+Zia Cooke,SEA,Shooter,24,2,27,268,9.9,-4.8,-2.27,-2.52,-0.4

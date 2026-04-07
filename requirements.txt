@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+nba_api
+requests
+beautifulsoup4
+plotly
+Pillow

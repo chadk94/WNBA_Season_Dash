@@ -112,8 +112,8 @@ sim_results = load_simulation(
 
 st.title("🏀 WNBA 2026 Season Dashboard")
 col_meta1, col_meta2, col_meta3 = st.columns(3)
-completed = (schedule_df["status"] == "Final").sum() // 2
-total_games = len(schedule_df) // 2
+completed = (schedule_df["status"] == "Final").sum()
+total_games = len(schedule_df)
 remaining = total_games - completed
 col_meta1.metric("Games Played", completed)
 col_meta2.metric("Games Remaining", remaining)

@@ -259,8 +259,14 @@ def _load_manual_lebron() -> pd.DataFrame:
             elif c == "minutes":
                 col_map[c] = "minutes"
         df = df.rename(columns=col_map)
+        # Normalize legacy/alternate tricodes to current ones
+        TRICODE_MAP = {
+            "PHO": "PHX",
+            "NY":  "NYL",
+        }
         if "team" in df.columns:
-            df = df[df["team"].notna() & ~df["team"].str.upper().isin(["FA", "FREE AGENT", ""])]
+            df["team"] = df["team"].str.upper().str.strip().replace(TRICODE_MAP)
+            df = df[df["team"].notna() & ~df["team"].isin(["FA", "FREE AGENT", ""])]
         if "minutes" in df.columns:
             df["minutes"] = df["minutes"].astype(str).str.replace(",", "").astype(float)
         print(f"[fetch_data] Loaded manual LEBRON data: {len(df)} rows")

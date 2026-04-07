@@ -35,8 +35,10 @@ TEAM_LOGO_SLUGS = {
     "LVA": "lv",
     "MIN": "min",
     "NYL": "ny",
-    "PHO": "pho",
+    "PDX": "por",
+    "PHX": "phx",
     "SEA": "sea",
+    "TOR": "tor",
     "WAS": "was",
 }
 
@@ -52,8 +54,10 @@ TEAM_NAMES = {
     "LVA": "Las Vegas Aces",
     "MIN": "Minnesota Lynx",
     "NYL": "New York Liberty",
-    "PHO": "Phoenix Mercury",
+    "PDX": "Portland Fire",
+    "PHX": "Phoenix Mercury",
     "SEA": "Seattle Storm",
+    "TOR": "Toronto Tempo",
     "WAS": "Washington Mystics",
 }
 

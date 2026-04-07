@@ -205,6 +205,8 @@ def logo_b64(team: str, size: int = 28) -> str | None:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 row_height = 44
+n_teams = len(proj)
+
 fig_wins = go.Figure()
 fig_wins.add_trace(go.Bar(
     y=proj["team"],
@@ -216,25 +218,26 @@ fig_wins.add_trace(go.Bar(
     textposition="outside",
 ))
 
-# Embed logos as layout images pinned to each y-axis category
-logo_size = 0.7  # fraction of one bar slot
-for _, row in proj.iterrows():
-    src = logo_b64(row["team"])
+# Logos replace y-axis tick labels: hide text, embed image per row
+# y position in paper coords: rows are evenly spaced from top (reversed axis)
+for i, (_, row) in enumerate(proj.iterrows()):
+    src = logo_b64(row["team"], size=24)
     if src:
+        y_paper = 1.0 - (i + 0.5) / n_teams
         fig_wins.add_layout_image(dict(
             source=src,
-            xref="paper", yref="y",
-            x=0, y=row["team"],
-            sizex=logo_size, sizey=logo_size,
+            xref="paper", yref="paper",
+            x=0, y=y_paper,
+            sizex=0.04, sizey=0.04 * (700 / max(300, n_teams * row_height)),
             xanchor="right", yanchor="middle",
             layer="above",
         ))
 
 fig_wins.update_layout(
     xaxis_title="Projected Wins",
-    yaxis=dict(autorange="reversed"),
-    height=max(300, len(proj) * row_height),
-    margin=dict(l=55, r=80, t=20, b=40),
+    yaxis=dict(autorange="reversed", showticklabels=False),
+    height=max(300, n_teams * row_height),
+    margin=dict(l=35, r=80, t=20, b=40),
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
 )

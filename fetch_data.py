@@ -276,11 +276,16 @@ def _load_manual_lebron() -> pd.DataFrame:
     return pd.DataFrame(columns=["player", "team", "lebron"])
 
 
-def get_team_lebron(player_df: pd.DataFrame = None) -> dict:
+def get_team_lebron(player_df: pd.DataFrame = None, rosters: dict = None) -> dict:
     """
     Aggregate player LEBRON WAR to team level (sum).
     LEBRON WAR is already minutes-adjusted, so summing gives total roster quality.
     Falls back to minutes-weighted average LEBRON if WAR is unavailable.
+
+    If rosters (from get_team_rosters) are provided, team membership is determined
+    by the API roster — the 'team' column in player_df is ignored for grouping.
+    Players in player_df not found on any API roster are excluded.
+
     Returns {team_abbr: team_value}.
     """
     if player_df is None:
@@ -289,12 +294,30 @@ def get_team_lebron(player_df: pd.DataFrame = None) -> dict:
     if player_df.empty:
         return {}
 
-    # Team-level CSV (no player column) — use values directly
+    # Team-level CSV (no player column) — use values directly, no roster join possible
     if "player" not in player_df.columns:
         return dict(zip(player_df["team"].str.upper(), player_df["lebron"].astype(float)))
 
     df = player_df.copy()
-    df["team"] = df["team"].str.upper()
+
+    if rosters:
+        # Build player name → team map from the API roster (authoritative)
+        name_to_team = {}
+        for abbr, roster_df in rosters.items():
+            if "player" in roster_df.columns:
+                for name in roster_df["player"]:
+                    name_to_team[str(name).strip()] = abbr
+
+        df["team"] = df["player"].map(lambda n: name_to_team.get(str(n).strip()))
+        unmatched = df["team"].isna().sum()
+        if unmatched:
+            print(f"[fetch_data] {unmatched} LEBRON players not matched to any API roster (excluded)")
+        df = df[df["team"].notna()]
+    else:
+        df["team"] = df["team"].str.upper()
+
+    if df.empty:
+        return {}
 
     if "lebron_war" in df.columns:
         df["lebron_war"] = pd.to_numeric(df["lebron_war"], errors="coerce").fillna(0)
@@ -307,6 +330,85 @@ def get_team_lebron(player_df: pd.DataFrame = None) -> dict:
         return (agg["lebron_x_min"] / agg["total_min"]).to_dict()
 
     return df.groupby("team")["lebron"].mean().to_dict()
+
+
+def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
+    """
+    Fetch the roster for every WNBA team via nba_api.
+    Returns {team_abbr: DataFrame} where each DataFrame has columns:
+      player_id, player, num, position, height, weight, birth_date,
+      age, experience, school
+    Results are cached in data/rosters_<season>.json for 24 hours.
+    """
+    cache_key = f"rosters_{season}"
+    cached = _load_cache(cache_key)
+    if cached:
+        return {abbr: pd.DataFrame(rows) for abbr, rows in cached.items()}
+
+    season_str = f"{season}-{str(season + 1)[-2:]}"
+
+    try:
+        from nba_api.stats.static import teams as static_teams
+        from nba_api.stats.endpoints import commonteamroster
+    except ImportError as e:
+        print(f"[fetch_data] nba_api not available: {e}")
+        return {}
+
+    # Static abbreviations that differ from our tricodes
+    STATIC_TO_TRICODE = {
+        "PHO": "PHX",
+        "NY":  "NYL",
+    }
+
+    # Build tricode → team_id map from the static WNBA teams list
+    known_teams = set(TEAM_LOGO_SLUGS.keys())
+    team_id_map = {}
+    for t in static_teams.get_wnba_teams():
+        static_abbr = t["abbreviation"].upper()
+        abbr = STATIC_TO_TRICODE.get(static_abbr, static_abbr)
+        if abbr in known_teams:
+            team_id_map[abbr] = t["id"]
+
+    if not team_id_map:
+        print("[fetch_data] No WNBA teams found in static data.")
+        return {}
+
+    # Fetch roster for each team
+    rosters = {}
+    for abbr, team_id in sorted(team_id_map.items()):
+        try:
+            roster_ep = commonteamroster.CommonTeamRoster(
+                team_id=team_id,
+                season=season_str,
+                league_id_nullable="10",
+            )
+            df = roster_ep.get_data_frames()[0]
+
+            col_map = {
+                "PLAYER":     "player",
+                "PLAYER_ID":  "player_id",
+                "NUM":        "num",
+                "POSITION":   "position",
+                "HEIGHT":     "height",
+                "WEIGHT":     "weight",
+                "BIRTH_DATE": "birth_date",
+                "AGE":        "age",
+                "EXP":        "experience",
+                "SCHOOL":     "school",
+                "HOW_ACQUIRED": "how_acquired",
+            }
+            df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+            keep = [c for c in ["player_id", "player", "num", "position", "height",
+                                "weight", "birth_date", "age", "experience", "school",
+                                "how_acquired"] if c in df.columns]
+            rosters[abbr] = df[keep]
+            time.sleep(0.3)  # be polite to the API
+        except Exception as e:
+            print(f"[fetch_data] Roster fetch failed for {abbr}: {e}")
+
+    _save_cache(cache_key, {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()})
+    print(f"[fetch_data] Rosters: fetched {len(rosters)}/{len(team_id_map)} teams")
+    return rosters
 
 
 def get_team_logo(team_abbr: str) -> Path | None:
@@ -358,6 +460,13 @@ if __name__ == "__main__":
     team_lebron = get_team_lebron(player_df)
     for team, val in sorted(team_lebron.items(), key=lambda x: -x[1]):
         print(f"  {team}: {val:.2f}")
+
+    print("\n=== Fetching Team Rosters ===")
+    rosters = get_team_rosters(2026)
+    for abbr, df in sorted(rosters.items()):
+        print(f"  {abbr}: {len(df)} players")
+        if not df.empty:
+            print(df[["player", "position", "age"]].head(3).to_string(index=False))
 
     print("\n=== Fetching Logos ===")
     prefetch_all_logos()

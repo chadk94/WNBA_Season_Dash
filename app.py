@@ -18,6 +18,7 @@ from fetch_data import (
     TEAM_NAMES,
     get_schedule,
     get_team_lebron,
+    get_team_rosters,
     get_player_lebron,
     get_team_logo,
     prefetch_all_logos,
@@ -70,7 +71,15 @@ def load_schedule():
 @st.cache_data(ttl=3600, show_spinner="Loading LEBRON ratings...")
 def load_team_lebron():
     player_df = get_player_lebron()
-    return get_team_lebron(player_df)
+    rosters = get_team_rosters(SEASON)
+    return get_team_lebron(player_df, rosters)
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading rosters...")
+def load_rosters() -> dict:
+    rosters = get_team_rosters(SEASON)
+    # Convert DataFrames to JSON-serialisable dicts for Streamlit cache
+    return {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()}
 
 
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
@@ -121,211 +130,252 @@ col_meta3.metric("Simulations", "1,000")
 
 st.divider()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 — NEXT TWO GAMEDAYS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-st.markdown('<div class="section-header">📅 Next Two Gamedays</div>', unsafe_allow_html=True)
-
-next_dates = get_next_gamedays(schedule_df, n=2)
-
-if not next_dates:
-    st.info("No upcoming games found.")
-else:
-    for game_date in next_dates:
-        st.subheader(pd.to_datetime(game_date).strftime("%A, %B %#d, %Y"))
-        day_games = schedule_df[schedule_df["date"] == game_date]
-
-        cols = st.columns(min(len(day_games), 3))
-        for i, (_, game) in enumerate(day_games.iterrows()):
-            col = cols[i % len(cols)]
-            home = game["home_team"]
-            away = game["away_team"]
-            home_lbr = team_lebron.get(home, 0.0)
-            away_lbr = team_lebron.get(away, 0.0)
-            home_wp = win_probability(home_lbr, away_lbr)
-            away_wp = 1.0 - home_wp
-            spread = win_prob_to_spread(home_wp)  # positive = home favored
-            home_favored = home_wp >= 0.5
-
-            with col:
-                with st.container(border=True):
-                    # Logos + teams
-                    lc, mc, rc = st.columns([2, 1, 2])
-                    with lc:
-                        img = logo_image(away, 50)
-                        if img:
-                            st.image(img, width=50)
-                        away_name = TEAM_NAMES.get(away, away)
-                        if not home_favored:
-                            st.markdown(f"**{away_name}**")
-                        else:
-                            st.markdown(f"{away_name}")
-                        st.markdown(f"{'🟢' if not home_favored else ''} **{away_wp:.0%}**")
-                    with mc:
-                        st.markdown("<br><div style='text-align:center;font-size:1.2rem'>@</div>",
-                                    unsafe_allow_html=True)
-                    with rc:
-                        img = logo_image(home, 50)
-                        if img:
-                            st.image(img, width=50)
-                        home_name = TEAM_NAMES.get(home, home)
-                        if home_favored:
-                            st.markdown(f"**{home_name}**")
-                        else:
-                            st.markdown(f"{home_name}")
-                        st.markdown(f"{'🟢' if home_favored else ''} **{home_wp:.0%}**")
-
-                    # Spread: negative = favorite, positive = underdog (standard convention)
-                    # spread < 0 means home favored; spread > 0 means away favored
-                    if abs(spread) < 0.5:
-                        st.caption("Pick 'em")
-                    elif home_favored:
-                        st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}")
-                    else:
-                        st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}")
-
-st.divider()
+tab_season, tab_rosters = st.tabs(["Season Projections", "Rosters"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — PROJECTED SEASON WINS
+# TAB 1 — SEASON PROJECTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown('<div class="section-header">📊 Projected Season Wins</div>', unsafe_allow_html=True)
+with tab_season:
 
-proj = sim_results.projected_wins
+    # ── Section 1: Next Two Gamedays ─────────────────────────────────────────
+    st.markdown('<div class="section-header">📅 Next Two Gamedays</div>', unsafe_allow_html=True)
 
-def logo_b64(team: str, size: int = 28) -> str | None:
-    path = get_team_logo(team)
-    if not path or not path.exists():
-        return None
-    img = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    next_dates = get_next_gamedays(schedule_df, n=2)
 
-row_height = 44
-n_teams = len(proj)
-
-fig_wins = go.Figure()
-fig_wins.add_trace(go.Bar(
-    y=proj["team"],
-    x=proj["median_wins"],
-    orientation="h",
-    error_x=dict(type="data", array=proj["std_wins"], visible=True, color="#aaa"),
-    marker_color="#ff6b35",
-    text=proj["median_wins"].apply(lambda x: f"{x:.1f}"),
-    textposition="outside",
-))
-
-# Logos replace y-axis tick labels: hide text, embed image per row
-# y position in paper coords: rows are evenly spaced from top (reversed axis)
-for i, (_, row) in enumerate(proj.iterrows()):
-    src = logo_b64(row["team"], size=24)
-    if src:
-        y_paper = 1.0 - (i + 0.5) / n_teams
-        fig_wins.add_layout_image(dict(
-            source=src,
-            xref="paper", yref="paper",
-            x=0, y=y_paper,
-            sizex=0.04, sizey=0.04 * (700 / max(300, n_teams * row_height)),
-            xanchor="right", yanchor="middle",
-            layer="above",
-        ))
-
-fig_wins.update_layout(
-    xaxis_title="Projected Wins",
-    yaxis=dict(autorange="reversed", showticklabels=False),
-    height=max(300, n_teams * row_height),
-    margin=dict(l=35, r=80, t=20, b=40),
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-)
-st.plotly_chart(fig_wins, use_container_width=True)
-
-st.divider()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — PLAYOFF CHANCES
-# ═══════════════════════════════════════════════════════════════════════════════
-
-st.markdown('<div class="section-header">🏆 Playoff Chances (Top 8)</div>', unsafe_allow_html=True)
-
-playoff = sim_results.playoff_odds
-
-# Color bars by probability bracket
-def playoff_color(pct):
-    if pct >= 80:
-        return "#4ade80"
-    elif pct >= 50:
-        return "#facc15"
-    elif pct >= 20:
-        return "#fb923c"
+    if not next_dates:
+        st.info("No upcoming games found.")
     else:
-        return "#f87171"
+        for game_date in next_dates:
+            st.subheader(pd.to_datetime(game_date).strftime("%A, %B %#d, %Y"))
+            day_games = schedule_df[schedule_df["date"] == game_date]
 
-colors = [playoff_color(p) for p in playoff["playoff_pct"]]
+            cols = st.columns(min(len(day_games), 3))
+            for i, (_, game) in enumerate(day_games.iterrows()):
+                col = cols[i % len(cols)]
+                home = game["home_team"]
+                away = game["away_team"]
+                home_lbr = team_lebron.get(home, 0.0)
+                away_lbr = team_lebron.get(away, 0.0)
+                home_wp = win_probability(home_lbr, away_lbr)
+                away_wp = 1.0 - home_wp
+                spread = win_prob_to_spread(home_wp)
+                home_favored = home_wp >= 0.5
 
-fig_playoff = go.Figure(go.Bar(
-    x=playoff["team"],
-    y=playoff["playoff_pct"],
-    marker_color=colors,
-    text=playoff["playoff_pct"].apply(lambda x: f"{x:.0f}%"),
-    textposition="outside",
-))
-fig_playoff.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
-fig_playoff.update_layout(
-    yaxis=dict(title="Playoff Probability (%)", range=[0, 110]),
-    height=350,
-    margin=dict(l=40, r=40, t=20, b=40),
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-)
-st.plotly_chart(fig_playoff, use_container_width=True)
+                with col:
+                    with st.container(border=True):
+                        lc, mc, rc = st.columns([2, 1, 2])
+                        with lc:
+                            img = logo_image(away, 50)
+                            if img:
+                                st.image(img, width=50)
+                            away_name = TEAM_NAMES.get(away, away)
+                            st.markdown(f"**{away_name}**" if not home_favored else away_name)
+                            st.markdown(f"{'🟢' if not home_favored else ''} **{away_wp:.0%}**")
+                        with mc:
+                            st.markdown("<br><div style='text-align:center;font-size:1.2rem'>@</div>",
+                                        unsafe_allow_html=True)
+                        with rc:
+                            img = logo_image(home, 50)
+                            if img:
+                                st.image(img, width=50)
+                            home_name = TEAM_NAMES.get(home, home)
+                            st.markdown(f"**{home_name}**" if home_favored else home_name)
+                            st.markdown(f"{'🟢' if home_favored else ''} **{home_wp:.0%}**")
 
-st.divider()
+                        if abs(spread) < 0.5:
+                            st.caption("Pick 'em")
+                        elif home_favored:
+                            st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}")
+                        else:
+                            st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}")
+
+    st.divider()
+
+    # ── Section 2: Projected Season Wins ────────────────────────────────────
+    st.markdown('<div class="section-header">📊 Projected Season Wins</div>', unsafe_allow_html=True)
+
+    proj = sim_results.projected_wins
+
+    def logo_b64(team: str, size: int = 28) -> str | None:
+        path = get_team_logo(team)
+        if not path or not path.exists():
+            return None
+        img = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    row_height = 44
+    n_teams = len(proj)
+
+    fig_wins = go.Figure()
+    fig_wins.add_trace(go.Bar(
+        y=proj["team"],
+        x=proj["median_wins"],
+        orientation="h",
+        error_x=dict(type="data", array=proj["std_wins"], visible=True, color="#aaa"),
+        marker_color="#ff6b35",
+        text=proj["median_wins"].apply(lambda x: f"{x:.1f}"),
+        textposition="outside",
+    ))
+
+    for i, (_, row) in enumerate(proj.iterrows()):
+        src = logo_b64(row["team"], size=24)
+        if src:
+            y_paper = 1.0 - (i + 0.5) / n_teams
+            fig_wins.add_layout_image(dict(
+                source=src,
+                xref="paper", yref="paper",
+                x=0, y=y_paper,
+                sizex=0.04, sizey=0.04 * (700 / max(300, n_teams * row_height)),
+                xanchor="right", yanchor="middle",
+                layer="above",
+            ))
+
+    fig_wins.update_layout(
+        xaxis_title="Projected Wins",
+        yaxis=dict(autorange="reversed", showticklabels=False),
+        height=max(300, n_teams * row_height),
+        margin=dict(l=35, r=80, t=20, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig_wins, use_container_width=True)
+
+    st.divider()
+
+    # ── Section 3: Playoff Chances ───────────────────────────────────────────
+    st.markdown('<div class="section-header">🏆 Playoff Chances (Top 8)</div>', unsafe_allow_html=True)
+
+    playoff = sim_results.playoff_odds
+
+    def playoff_color(pct):
+        if pct >= 80:
+            return "#4ade80"
+        elif pct >= 50:
+            return "#facc15"
+        elif pct >= 20:
+            return "#fb923c"
+        else:
+            return "#f87171"
+
+    colors = [playoff_color(p) for p in playoff["playoff_pct"]]
+
+    fig_playoff = go.Figure(go.Bar(
+        x=playoff["team"],
+        y=playoff["playoff_pct"],
+        marker_color=colors,
+        text=playoff["playoff_pct"].apply(lambda x: f"{x:.0f}%"),
+        textposition="outside",
+    ))
+    fig_playoff.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
+    fig_playoff.update_layout(
+        yaxis=dict(title="Playoff Probability (%)", range=[0, 110]),
+        height=350,
+        margin=dict(l=40, r=40, t=20, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig_playoff, use_container_width=True)
+
+    st.divider()
+
+    # ── Section 4: Seed Probabilities ────────────────────────────────────────
+    st.markdown('<div class="section-header">🔢 Seed Probability Table</div>', unsafe_allow_html=True)
+
+    seed_df = sim_results.seed_probabilities
+    seed_cols = [c for c in seed_df.columns if c != "team"]
+    display_df = seed_df.set_index("team")[seed_cols]
+
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=display_df.values,
+        x=seed_cols,
+        y=display_df.index.tolist(),
+        colorscale=[
+            [0.0, "#1e1e2e"],
+            [0.3, "#1d4ed8"],
+            [0.6, "#f59e0b"],
+            [1.0, "#22c55e"],
+        ],
+        text=display_df.map(lambda x: f"{x:.0f}%").values,
+        texttemplate="%{text}",
+        showscale=False,
+        hoverongaps=False,
+    ))
+    fig_heat.update_layout(
+        height=max(300, len(display_df) * 40),
+        margin=dict(l=80, r=40, t=20, b=40),
+        xaxis=dict(side="top"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    st.caption(
+        "Win probabilities derived from team LEBRON totals (Basketball Index) "
+        "via logistic model. Season simulated 1,000 times. "
+        "LEBRON = Luck-adjusted player Estimate using Box prior Regularized ON-OFF."
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — SEED PROBABILITIES
+# TAB 2 — ROSTERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.markdown('<div class="section-header">🔢 Seed Probability Table</div>', unsafe_allow_html=True)
+with tab_rosters:
+    st.markdown('<div class="section-header">🏀 Team Rosters</div>', unsafe_allow_html=True)
 
-seed_df = sim_results.seed_probabilities
-seed_cols = [c for c in seed_df.columns if c != "team"]
-display_df = seed_df.set_index("team")[seed_cols]
+    rosters_raw = load_rosters()
 
-# Format as percentages
-display_formatted = display_df.map(lambda x: f"{x:.0f}%")
+    if not rosters_raw:
+        st.info("Roster data is not yet available.")
+    else:
+        sorted_teams = sorted(rosters_raw.keys(), key=lambda t: TEAM_NAMES.get(t, t))
+        team_options = {TEAM_NAMES.get(t, t): t for t in sorted_teams}
 
-# Heatmap using plotly
-fig_heat = go.Figure(data=go.Heatmap(
-    z=display_df.values,
-    x=seed_cols,
-    y=display_df.index.tolist(),
-    colorscale=[
-        [0.0, "#1e1e2e"],
-        [0.3, "#1d4ed8"],
-        [0.6, "#f59e0b"],
-        [1.0, "#22c55e"],
-    ],
-    text=display_df.map(lambda x: f"{x:.0f}%").values,
-    texttemplate="%{text}",
-    showscale=False,
-    hoverongaps=False,
-))
-fig_heat.update_layout(
-    height=max(300, len(display_df) * 40),
-    margin=dict(l=80, r=40, t=20, b=40),
-    xaxis=dict(side="top"),
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-)
-st.plotly_chart(fig_heat, use_container_width=True)
+        selected_name = st.selectbox(
+            "Select a team",
+            options=list(team_options.keys()),
+            label_visibility="collapsed",
+        )
+        selected_abbr = team_options[selected_name]
 
-# ── Footer ───────────────────────────────────────────────────────────────────
-st.caption(
-    "Win probabilities derived from team LEBRON totals (Basketball Index) "
-    "via logistic model. Season simulated 1,000 times. "
-    "LEBRON = Luck-adjusted player Estimate using Box prior Regularized ON-OFF."
-)
+        logo_col, name_col = st.columns([1, 8])
+        with logo_col:
+            logo = logo_image(selected_abbr, size=60)
+            if logo:
+                st.image(logo, width=60)
+        with name_col:
+            st.subheader(selected_name)
+
+        roster_df = pd.DataFrame(rosters_raw[selected_abbr])
+
+        if roster_df.empty:
+            st.info("No roster data available for this team yet.")
+        else:
+            col_labels = {
+                "player":      "Player",
+                "num":         "#",
+                "position":    "Pos",
+                "height":      "Height",
+                "weight":      "Weight",
+                "age":         "Age",
+                "experience":  "Exp",
+                "school":      "School/Country",
+                "how_acquired": "How Acquired",
+            }
+            display_cols = [c for c in col_labels if c in roster_df.columns]
+            display = roster_df[display_cols].rename(columns=col_labels)
+
+            if "Age" in display.columns:
+                display["Age"] = pd.to_numeric(display["Age"], errors="coerce").astype("Int64")
+            if "Exp" in display.columns:
+                display["Exp"] = display["Exp"].replace("R", "Rookie")
+
+            st.dataframe(
+                display,
+                use_container_width=True,
+                hide_index=True,
+                height=min(600, 36 + len(display) * 35),
+            )
+            st.caption(f"{len(roster_df)} players on roster")

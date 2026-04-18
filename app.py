@@ -6,6 +6,7 @@ Run with: streamlit run app.py
 
 import base64
 import io
+import json
 from pathlib import Path
 
 import numpy as np
@@ -82,6 +83,20 @@ def load_rosters() -> dict:
     return {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()}
 
 
+@st.cache_data(ttl=3600, show_spinner="Loading player ratings...")
+def load_player_lebron_data() -> list[dict]:
+    df = get_player_lebron()
+    if df.empty or "player" not in df.columns:
+        return []
+    df = df.copy()
+    df["minutes"] = pd.to_numeric(df.get("minutes", 0), errors="coerce").fillna(0)
+    df["lebron_war"] = pd.to_numeric(df.get("lebron_war", 0), errors="coerce").fillna(0)
+    df["war_per_min"] = df.apply(
+        lambda r: r["lebron_war"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
+    )
+    return df[["player", "team", "minutes", "lebron_war", "war_per_min"]].to_dict(orient="records")
+
+
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
 def load_simulation(schedule_json: str, team_lebron_json: str) -> SimResults:
     import json
@@ -111,11 +126,38 @@ if schedule_df.empty:
     )
     st.stop()
 
-import json
 sim_results = load_simulation(
     schedule_df.to_json(orient="records"),
     json.dumps(team_lebron),
 )
+
+# ── Rotation persistence helpers ─────────────────────────────────────────────
+
+_ROTATION_SAVE_PATH = Path(__file__).parent / "data" / "custom_rotation.json"
+
+
+def _save_rotation_to_disk() -> None:
+    data = {
+        k: int(v)
+        for k, v in st.session_state.items()
+        if isinstance(k, str) and k.startswith("rot_") and isinstance(v, (int, float))
+    }
+    _ROTATION_SAVE_PATH.write_text(json.dumps(data, indent=2))
+
+
+def _load_rotation_from_disk() -> bool:
+    if not _ROTATION_SAVE_PATH.exists():
+        return False
+    data = json.loads(_ROTATION_SAVE_PATH.read_text())
+    for k, v in data.items():
+        st.session_state[k] = int(v)
+    return True
+
+
+# Auto-load saved rotation once per browser session
+if "rotation_file_loaded" not in st.session_state:
+    _load_rotation_from_disk()
+    st.session_state["rotation_file_loaded"] = True
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
@@ -130,7 +172,7 @@ col_meta3.metric("Simulations", "1,000")
 
 st.divider()
 
-tab_season, tab_rosters = st.tabs(["Season Projections", "Rosters"])
+tab_season, tab_rosters, tab_rotation = st.tabs(["Season Projections", "Rosters", "Rotation Builder"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — SEASON PROJECTIONS
@@ -379,3 +421,182 @@ with tab_rosters:
                 height=min(600, 36 + len(display) * 35),
             )
             st.caption(f"{len(roster_df)} players on roster")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — ROTATION BUILDER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with tab_rotation:
+    st.markdown('<div class="section-header">⚙️ Rotation Builder</div>', unsafe_allow_html=True)
+    st.caption(
+        "Set custom rotation minutes per player. "
+        "Team WAR is recalculated as the sum of each player's WAR-per-minute × custom minutes."
+    )
+
+    btn_col1, btn_col2, _ = st.columns([1, 1, 6])
+    with btn_col1:
+        if st.button("💾 Save", use_container_width=True, help="Save rotation to disk"):
+            _save_rotation_to_disk()
+            st.success("Rotation saved.")
+    with btn_col2:
+        if st.button("📂 Load", use_container_width=True, help="Reload rotation from disk"):
+            if _load_rotation_from_disk():
+                st.success("Rotation loaded.")
+                st.rerun()
+            else:
+                st.info("No saved rotation found.")
+
+    player_records = load_player_lebron_data()
+
+    if not player_records:
+        st.info(
+            "Player LEBRON data not available. "
+            "Ensure data/lebron_manual.csv is present with Minutes and LEBRON WAR columns."
+        )
+    else:
+        all_players_df = pd.DataFrame(player_records)
+
+        # ── Team selector ────────────────────────────────────────────────────
+        teams_in_data = sorted(all_players_df["team"].dropna().unique())
+        rot_team_options = {TEAM_NAMES.get(t, t): t for t in teams_in_data}
+
+        selected_rot_name = st.selectbox(
+            "Select team",
+            options=list(rot_team_options.keys()),
+            label_visibility="collapsed",
+            key="rotation_team_select",
+        )
+        selected_rot_abbr = rot_team_options[selected_rot_name]
+
+        # ── Team header ──────────────────────────────────────────────────────
+        logo_col, name_col = st.columns([1, 8])
+        with logo_col:
+            logo = logo_image(selected_rot_abbr, size=60)
+            if logo:
+                st.image(logo, width=60)
+        with name_col:
+            st.subheader(selected_rot_name)
+
+        team_players_df = (
+            all_players_df[all_players_df["team"] == selected_rot_abbr]
+            .sort_values("war_per_min", ascending=False)
+            .reset_index(drop=True)
+        )
+
+        if team_players_df.empty:
+            st.info("No player data available for this team.")
+        else:
+            # Build the editor dataframe, seeding Custom Min from session state if present
+            def _saved_min(team: str, player: str, default: int) -> int:
+                return int(st.session_state.get(f"rot_{team}_{player}", default))
+
+            editor_rows = [
+                {
+                    "Player": row["player"],
+                    "Actual Min": int(row["minutes"]),
+                    "Custom Min": _saved_min(selected_rot_abbr, row["player"], int(row["minutes"])),
+                    "WAR/Min": round(row["war_per_min"], 4),
+                }
+                for _, row in team_players_df.iterrows()
+            ]
+            editor_df = pd.DataFrame(editor_rows)
+
+            edited = st.data_editor(
+                editor_df,
+                column_config={
+                    "Player":     st.column_config.TextColumn("Player", disabled=True),
+                    "Actual Min": st.column_config.NumberColumn("Actual Min", disabled=True),
+                    "Custom Min": st.column_config.NumberColumn(
+                        "Custom Min", min_value=0, max_value=2000, step=10
+                    ),
+                    "WAR/Min":    st.column_config.NumberColumn(
+                        "WAR/Min", disabled=True, format="%.4f"
+                    ),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key=f"editor_{selected_rot_abbr}",
+                num_rows="fixed",
+            )
+
+            # Persist custom minutes in session state so league chart can read them
+            for _, row in edited.iterrows():
+                key = f"rot_{selected_rot_abbr}_{row['Player']}"
+                st.session_state[key] = int(row["Custom Min"])
+
+            # ── WAR summary metrics ──────────────────────────────────────────
+            edited["Proj WAR"] = edited["Custom Min"] * edited["WAR/Min"]
+            actual_war = (editor_df["Actual Min"] * editor_df["WAR/Min"]).sum()
+            custom_war = edited["Proj WAR"].sum()
+            actual_total_min = editor_df["Actual Min"].sum()
+            custom_total_min = edited["Custom Min"].sum()
+
+            mc1, mc2, mc3 = st.columns(3)
+            mc1.metric(
+                "Custom Team WAR",
+                f"{custom_war:.2f}",
+                delta=f"{custom_war - actual_war:+.2f} vs baseline",
+            )
+            mc2.metric(
+                "Total Custom Minutes",
+                f"{custom_total_min:,}",
+                delta=f"{custom_total_min - actual_total_min:+,} vs actual",
+            )
+            mc3.metric("Players in Rotation", len(edited[edited["Custom Min"] > 0]))
+
+        st.divider()
+
+        # ── League-wide WAR comparison ───────────────────────────────────────
+        st.markdown('<div class="section-header">📊 League WAR Comparison</div>', unsafe_allow_html=True)
+
+        league_wars: dict[str, float] = {}
+        teams_with_custom: set[str] = set()
+
+        for team in teams_in_data:
+            t_df = all_players_df[all_players_df["team"] == team]
+            war_total = 0.0
+            has_custom = False
+            for _, row in t_df.iterrows():
+                key = f"rot_{team}_{row['player']}"
+                actual = int(row["minutes"])
+                custom = st.session_state.get(key)
+                if custom is not None and custom != actual:
+                    has_custom = True
+                custom_min = custom if custom is not None else actual
+                war_total += row["war_per_min"] * custom_min
+            league_wars[team] = war_total
+            if has_custom:
+                teams_with_custom.add(team)
+
+        league_df = pd.DataFrame(
+            [{"team": t, "war": w} for t, w in sorted(league_wars.items(), key=lambda x: -x[1])]
+        )
+
+        bar_colors = [
+            "#ff6b35" if row["team"] in teams_with_custom else "#64748b"
+            for _, row in league_df.iterrows()
+        ]
+
+        fig_league = go.Figure(go.Bar(
+            y=league_df["team"],
+            x=league_df["war"],
+            orientation="h",
+            marker_color=bar_colors,
+            text=league_df["war"].apply(lambda x: f"{x:.1f}"),
+            textposition="outside",
+        ))
+        fig_league.update_layout(
+            xaxis_title="Team WAR",
+            yaxis=dict(autorange="reversed"),
+            height=max(300, len(league_df) * 44),
+            margin=dict(l=60, r=80, t=20, b=40),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_league, use_container_width=True)
+
+        st.caption(
+            "Orange bars = teams with custom rotation minutes set. "
+            "Gray bars = baseline (actual minutes from LEBRON data). "
+            "Team WAR = Σ (LEBRON WAR/min × custom minutes) per player."
+        )

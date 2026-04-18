@@ -258,6 +258,8 @@ def _load_manual_lebron() -> pd.DataFrame:
                 col_map[c] = "team"
             elif c == "minutes":
                 col_map[c] = "minutes"
+            elif c == "mpg":
+                col_map[c] = "mpg"
         df = df.rename(columns=col_map)
         # Normalize legacy/alternate tricodes to current ones
         TRICODE_MAP = {
@@ -270,7 +272,7 @@ def _load_manual_lebron() -> pd.DataFrame:
         if "minutes" in df.columns:
             df["minutes"] = df["minutes"].astype(str).str.replace(",", "").astype(float)
         print(f"[fetch_data] Loaded manual LEBRON data: {len(df)} rows")
-        keep = [c for c in ["player", "team", "lebron", "lebron_war", "minutes"] if c in df.columns]
+        keep = [c for c in ["player", "team", "lebron", "lebron_war", "minutes", "mpg"] if c in df.columns]
         return df[keep]
     # Return empty frame — model will handle missing teams gracefully
     return pd.DataFrame(columns=["player", "team", "lebron"])

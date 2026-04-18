@@ -94,7 +94,15 @@ def load_player_lebron_data() -> list[dict]:
     df["war_per_min"] = df.apply(
         lambda r: r["lebron_war"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
     )
-    return df[["player", "team", "minutes", "lebron_war", "war_per_min"]].to_dict(orient="records")
+    # Use MPG from data if present; otherwise derive from total minutes (fallback only)
+    if "mpg" not in df.columns:
+        df["mpg"] = df["minutes"] / 40  # rough fallback if CSV lacks MPG column
+    df["mpg"] = pd.to_numeric(df["mpg"], errors="coerce").fillna(0).round(1)
+    # WAR per MPG: scaling MPG up/down scales WAR proportionally
+    df["war_per_mpg"] = df.apply(
+        lambda r: r["lebron_war"] / r["mpg"] if r["mpg"] > 0 else 0.0, axis=1
+    ).round(4)
+    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "war_per_mpg"]].to_dict(orient="records")
 
 
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
@@ -429,8 +437,8 @@ with tab_rosters:
 with tab_rotation:
     st.markdown('<div class="section-header">⚙️ Rotation Builder</div>', unsafe_allow_html=True)
     st.caption(
-        "Set custom rotation minutes per player. "
-        "Team WAR is recalculated as the sum of each player's WAR-per-minute × custom minutes."
+        "Set minutes per game (MPG) for each player (max 40). "
+        "Team WAR = Σ (WAR/MPG × Custom MPG) across all players."
     )
 
     btn_col1, btn_col2, _ = st.columns([1, 1, 6])
@@ -493,9 +501,9 @@ with tab_rotation:
             editor_rows = [
                 {
                     "Player": row["player"],
-                    "Actual Min": int(row["minutes"]),
-                    "Custom Min": _saved_min(selected_rot_abbr, row["player"], int(row["minutes"])),
-                    "WAR/Min": round(row["war_per_min"], 4),
+                    "Actual MPG": round(row["mpg"], 1),
+                    "Custom MPG": _saved_min(selected_rot_abbr, row["player"], round(row["mpg"], 1)),
+                    "WAR/MPG": round(row["war_per_mpg"], 4),
                 }
                 for _, row in team_players_df.iterrows()
             ]
@@ -505,12 +513,13 @@ with tab_rotation:
                 editor_df,
                 column_config={
                     "Player":     st.column_config.TextColumn("Player", disabled=True),
-                    "Actual Min": st.column_config.NumberColumn("Actual Min", disabled=True),
-                    "Custom Min": st.column_config.NumberColumn(
-                        "Custom Min", min_value=0, max_value=2000, step=10
+                    "Actual MPG": st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
+                    "Custom MPG": st.column_config.NumberColumn(
+                        "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
                     ),
-                    "WAR/Min":    st.column_config.NumberColumn(
-                        "WAR/Min", disabled=True, format="%.4f"
+                    "WAR/MPG":    st.column_config.NumberColumn(
+                        "WAR/MPG", disabled=True, format="%.4f",
+                        help="WAR added per minute-per-game played over a full 40-game season"
                     ),
                 },
                 hide_index=True,
@@ -519,17 +528,14 @@ with tab_rotation:
                 num_rows="fixed",
             )
 
-            # Persist custom minutes in session state so league chart can read them
+            # Persist custom MPG in session state so league chart can read them
             for _, row in edited.iterrows():
-                key = f"rot_{selected_rot_abbr}_{row['Player']}"
-                st.session_state[key] = int(row["Custom Min"])
+                st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom MPG"])
 
             # ── WAR summary metrics ──────────────────────────────────────────
-            edited["Proj WAR"] = edited["Custom Min"] * edited["WAR/Min"]
-            actual_war = (editor_df["Actual Min"] * editor_df["WAR/Min"]).sum()
+            edited["Proj WAR"] = edited["Custom MPG"] * edited["WAR/MPG"]
+            actual_war = (editor_df["Actual MPG"] * editor_df["WAR/MPG"]).sum()
             custom_war = edited["Proj WAR"].sum()
-            actual_total_min = editor_df["Actual Min"].sum()
-            custom_total_min = edited["Custom Min"].sum()
 
             mc1, mc2, mc3 = st.columns(3)
             mc1.metric(
@@ -538,11 +544,11 @@ with tab_rotation:
                 delta=f"{custom_war - actual_war:+.2f} vs baseline",
             )
             mc2.metric(
-                "Total Custom Minutes",
-                f"{custom_total_min:,}",
-                delta=f"{custom_total_min - actual_total_min:+,} vs actual",
+                "Total Custom MPG",
+                f"{edited['Custom MPG'].sum():.1f}",
+                delta=f"{edited['Custom MPG'].sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
             )
-            mc3.metric("Players in Rotation", len(edited[edited["Custom Min"] > 0]))
+            mc3.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
 
         st.divider()
 
@@ -558,12 +564,12 @@ with tab_rotation:
             has_custom = False
             for _, row in t_df.iterrows():
                 key = f"rot_{team}_{row['player']}"
-                actual = int(row["minutes"])
-                custom = st.session_state.get(key)
-                if custom is not None and custom != actual:
+                actual_mpg = round(row["mpg"], 1)
+                custom_mpg = st.session_state.get(key)
+                if custom_mpg is not None and custom_mpg != actual_mpg:
                     has_custom = True
-                custom_min = custom if custom is not None else actual
-                war_total += row["war_per_min"] * custom_min
+                mpg = custom_mpg if custom_mpg is not None else actual_mpg
+                war_total += row["war_per_mpg"] * mpg
             league_wars[team] = war_total
             if has_custom:
                 teams_with_custom.add(team)
@@ -596,7 +602,7 @@ with tab_rotation:
         st.plotly_chart(fig_league, use_container_width=True)
 
         st.caption(
-            "Orange bars = teams with custom rotation minutes set. "
-            "Gray bars = baseline (actual minutes from LEBRON data). "
-            "Team WAR = Σ (LEBRON WAR/min × custom minutes) per player."
+            "Orange bars = teams with custom rotations set. "
+            "Gray bars = baseline (actual MPG from LEBRON data). "
+            "Team WAR = Σ (WAR/MPG × Custom MPG) per player."
         )

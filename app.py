@@ -131,7 +131,8 @@ def _save_rotation_to_disk() -> None:
     data = {
         k: float(v)
         for k, v in st.session_state.items()
-        if isinstance(k, str) and k.startswith("rot_") and isinstance(v, (int, float))
+        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("war_"))
+        and isinstance(v, (int, float))
     }
     _ROTATION_SAVE_PATH.write_text(json.dumps(data, indent=2))
 
@@ -174,7 +175,8 @@ def _compute_effective_team_war(
             continue
 
         war_total = sum(
-            war_lookup.get(p, 0.0) * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
+            st.session_state.get(f"war_{team}_{p}", war_lookup.get(p, 0.0))
+            * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
             for p in players
         )
         effective[team] = war_total
@@ -535,7 +537,11 @@ with tab_rotation:
                         f"rot_{selected_rot_abbr}_{p['player']}",
                         round(mpg_lookup.get(p["player"], 0.0), 1),
                     )),
-                    "WAR/MPG": round(war_lookup.get(p["player"], 0.0), 4),
+                    "Actual WAR/MPG": round(war_lookup.get(p["player"], 0.0), 4),
+                    "Custom WAR/MPG": float(st.session_state.get(
+                        f"war_{selected_rot_abbr}_{p['player']}",
+                        round(war_lookup.get(p["player"], 0.0), 4),
+                    )),
                 }
                 for p in roster_players if "player" in p
             ],
@@ -550,15 +556,16 @@ with tab_rotation:
             edited = st.data_editor(
                 editor_df,
                 column_config={
-                    "Player":     st.column_config.TextColumn("Player", disabled=True),
-                    "Pos":        st.column_config.TextColumn("Pos", disabled=True),
-                    "Actual MPG": st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
-                    "Custom MPG": st.column_config.NumberColumn(
+                    "Player":           st.column_config.TextColumn("Player", disabled=True),
+                    "Pos":              st.column_config.TextColumn("Pos", disabled=True),
+                    "Actual MPG":       st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
+                    "Custom MPG":       st.column_config.NumberColumn(
                         "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
                     ),
-                    "WAR/MPG":    st.column_config.NumberColumn(
-                        "WAR/MPG", disabled=True, format="%.4f",
-                        help="WAR added per minute-per-game played over a full season"
+                    "Actual WAR/MPG":   st.column_config.NumberColumn("Actual WAR/MPG", disabled=True, format="%.4f"),
+                    "Custom WAR/MPG":   st.column_config.NumberColumn(
+                        "Custom WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
+                        help="Override WAR rate (WAR per minute-per-game). Defaults to LEBRON value."
                     ),
                 },
                 hide_index=True,
@@ -567,13 +574,14 @@ with tab_rotation:
                 num_rows="fixed",
             )
 
-            # Persist custom MPG in session state so league chart can read them
+            # Persist custom MPG and WAR/MPG in session state
             for _, row in edited.iterrows():
                 st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom MPG"])
+                st.session_state[f"war_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom WAR/MPG"])
 
             # ── WAR summary metrics ──────────────────────────────────────────
-            edited["Proj WAR"] = edited["Custom MPG"] * edited["WAR/MPG"]
-            actual_war = (editor_df["Actual MPG"] * editor_df["WAR/MPG"]).sum()
+            edited["Proj WAR"] = edited["Custom MPG"] * edited["Custom WAR/MPG"]
+            actual_war = (editor_df["Actual MPG"] * editor_df["Actual WAR/MPG"]).sum()
             custom_war = edited["Proj WAR"].sum()
 
             mc1, mc2, mc3 = st.columns(3)
@@ -588,6 +596,8 @@ with tab_rotation:
                 delta=f"{edited['Custom MPG'].sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
             )
             mc3.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
+
+            st.caption("Proj WAR = Custom MPG × Custom WAR/MPG. Changes flow into simulations on Save.")
 
         st.divider()
 

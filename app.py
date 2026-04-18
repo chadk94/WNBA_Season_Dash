@@ -122,23 +122,6 @@ def logo_image(team: str, size: int = 40):
     return None
 
 
-# ── Load Data ────────────────────────────────────────────────────────────────
-
-schedule_df = load_schedule()
-team_lebron = load_team_lebron()
-
-if schedule_df.empty:
-    st.warning(
-        "⚠️ Schedule data is not yet available for the 2026 WNBA season. "
-        "The season typically starts in May. Check back soon!"
-    )
-    st.stop()
-
-sim_results = load_simulation(
-    schedule_df.to_json(orient="records"),
-    json.dumps(team_lebron),
-)
-
 # ── Rotation persistence helpers ─────────────────────────────────────────────
 
 _ROTATION_SAVE_PATH = Path(__file__).parent / "data" / "custom_rotation.json"
@@ -146,7 +129,7 @@ _ROTATION_SAVE_PATH = Path(__file__).parent / "data" / "custom_rotation.json"
 
 def _save_rotation_to_disk() -> None:
     data = {
-        k: int(v)
+        k: float(v)
         for k, v in st.session_state.items()
         if isinstance(k, str) and k.startswith("rot_") and isinstance(v, (int, float))
     }
@@ -158,14 +141,72 @@ def _load_rotation_from_disk() -> bool:
         return False
     data = json.loads(_ROTATION_SAVE_PATH.read_text())
     for k, v in data.items():
-        st.session_state[k] = int(v)
+        st.session_state[k] = float(v)
     return True
 
 
-# Auto-load saved rotation once per browser session
+def _compute_effective_team_war(
+    player_records: list[dict],
+    rosters_raw: dict,
+    baseline: dict,
+) -> dict:
+    """
+    Build team WAR using saved rotation MPG values where available.
+    Player list comes from API rosters; WAR/MPG rates come from LEBRON data.
+    Falls back to baseline WAR for teams with no LEBRON coverage.
+    """
+    if not player_records:
+        return baseline
+
+    war_lookup = {r["player"]: r["war_per_mpg"] for r in player_records}
+    mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
+
+    effective = {}
+    for team in baseline:
+        players = [p["player"] for p in rosters_raw.get(team, []) if "player" in p]
+        if not players:
+            effective[team] = baseline[team]
+            continue
+
+        has_lebron = any(war_lookup.get(p, 0.0) > 0 for p in players)
+        if not has_lebron:
+            effective[team] = baseline[team]
+            continue
+
+        war_total = sum(
+            war_lookup.get(p, 0.0) * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
+            for p in players
+        )
+        effective[team] = war_total
+
+    return effective
+
+
+# ── Load Data ────────────────────────────────────────────────────────────────
+
+schedule_df = load_schedule()
+team_lebron = load_team_lebron()
+player_records = load_player_lebron_data()
+rosters_raw = load_rosters()
+
+if schedule_df.empty:
+    st.warning(
+        "⚠️ Schedule data is not yet available for the 2026 WNBA season. "
+        "The season typically starts in May. Check back soon!"
+    )
+    st.stop()
+
+# Auto-load saved rotation once per browser session (must run before simulation)
 if "rotation_file_loaded" not in st.session_state:
     _load_rotation_from_disk()
     st.session_state["rotation_file_loaded"] = True
+
+effective_team_war = _compute_effective_team_war(player_records, rosters_raw, team_lebron)
+
+sim_results = load_simulation(
+    schedule_df.to_json(orient="records"),
+    json.dumps(effective_team_war),
+)
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
@@ -454,19 +495,16 @@ with tab_rotation:
             else:
                 st.info("No saved rotation found.")
 
-    player_records = load_player_lebron_data()
-
-    if not player_records:
-        st.info(
-            "Player LEBRON data not available. "
-            "Ensure data/lebron_manual.csv is present with Minutes and LEBRON WAR columns."
-        )
+    if not rosters_raw:
+        st.info("Roster data not available.")
     else:
-        all_players_df = pd.DataFrame(player_records)
+        # ── LEBRON lookup by player name ──────────────────────────────────────
+        war_lookup = {r["player"]: r["war_per_mpg"] for r in player_records}
+        mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
-        teams_in_data = sorted(all_players_df["team"].dropna().unique())
-        rot_team_options = {TEAM_NAMES.get(t, t): t for t in teams_in_data}
+        rot_teams = sorted(rosters_raw.keys(), key=lambda t: TEAM_NAMES.get(t, t))
+        rot_team_options = {TEAM_NAMES.get(t, t): t for t in rot_teams}
 
         selected_rot_name = st.selectbox(
             "Select team",
@@ -485,41 +523,42 @@ with tab_rotation:
         with name_col:
             st.subheader(selected_rot_name)
 
-        team_players_df = (
-            all_players_df[all_players_df["team"] == selected_rot_abbr]
-            .sort_values("war_per_min", ascending=False)
-            .reset_index(drop=True)
+        # Build editor rows from API roster, joined to LEBRON data by name
+        roster_players = rosters_raw.get(selected_rot_abbr, [])
+        editor_rows = sorted(
+            [
+                {
+                    "Player": p["player"],
+                    "Pos": p.get("position", ""),
+                    "Actual MPG": round(mpg_lookup.get(p["player"], 0.0), 1),
+                    "Custom MPG": float(st.session_state.get(
+                        f"rot_{selected_rot_abbr}_{p['player']}",
+                        round(mpg_lookup.get(p["player"], 0.0), 1),
+                    )),
+                    "WAR/MPG": round(war_lookup.get(p["player"], 0.0), 4),
+                }
+                for p in roster_players if "player" in p
+            ],
+            key=lambda x: -x["WAR/MPG"],
         )
 
-        if team_players_df.empty:
-            st.info("No player data available for this team.")
+        if not editor_rows:
+            st.info("No roster data available for this team.")
         else:
-            # Build the editor dataframe, seeding Custom Min from session state if present
-            def _saved_min(team: str, player: str, default: int) -> int:
-                return int(st.session_state.get(f"rot_{team}_{player}", default))
-
-            editor_rows = [
-                {
-                    "Player": row["player"],
-                    "Actual MPG": round(row["mpg"], 1),
-                    "Custom MPG": _saved_min(selected_rot_abbr, row["player"], round(row["mpg"], 1)),
-                    "WAR/MPG": round(row["war_per_mpg"], 4),
-                }
-                for _, row in team_players_df.iterrows()
-            ]
             editor_df = pd.DataFrame(editor_rows)
 
             edited = st.data_editor(
                 editor_df,
                 column_config={
                     "Player":     st.column_config.TextColumn("Player", disabled=True),
+                    "Pos":        st.column_config.TextColumn("Pos", disabled=True),
                     "Actual MPG": st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
                     "Custom MPG": st.column_config.NumberColumn(
                         "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
                     ),
                     "WAR/MPG":    st.column_config.NumberColumn(
                         "WAR/MPG", disabled=True, format="%.4f",
-                        help="WAR added per minute-per-game played over a full 40-game season"
+                        help="WAR added per minute-per-game played over a full season"
                     ),
                 },
                 hide_index=True,
@@ -555,27 +594,17 @@ with tab_rotation:
         # ── League-wide WAR comparison ───────────────────────────────────────
         st.markdown('<div class="section-header">📊 League WAR Comparison</div>', unsafe_allow_html=True)
 
-        league_wars: dict[str, float] = {}
-        teams_with_custom: set[str] = set()
+        # Recompute effective WAR live (reflects any edits made this render)
+        live_effective = _compute_effective_team_war(player_records, rosters_raw, team_lebron)
 
-        for team in teams_in_data:
-            t_df = all_players_df[all_players_df["team"] == team]
-            war_total = 0.0
-            has_custom = False
-            for _, row in t_df.iterrows():
-                key = f"rot_{team}_{row['player']}"
-                actual_mpg = round(row["mpg"], 1)
-                custom_mpg = st.session_state.get(key)
-                if custom_mpg is not None and custom_mpg != actual_mpg:
-                    has_custom = True
-                mpg = custom_mpg if custom_mpg is not None else actual_mpg
-                war_total += row["war_per_mpg"] * mpg
-            league_wars[team] = war_total
-            if has_custom:
+        teams_with_custom: set[str] = set()
+        for team in live_effective:
+            baseline_val = team_lebron.get(team, 0.0)
+            if abs(live_effective[team] - baseline_val) > 0.01:
                 teams_with_custom.add(team)
 
         league_df = pd.DataFrame(
-            [{"team": t, "war": w} for t, w in sorted(league_wars.items(), key=lambda x: -x[1])]
+            [{"team": t, "war": w} for t, w in sorted(live_effective.items(), key=lambda x: -x[1])]
         )
 
         bar_colors = [

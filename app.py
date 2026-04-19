@@ -545,7 +545,7 @@ with tab_rotation:
                 }
                 for p in roster_players if "player" in p
             ],
-            key=lambda x: -x["WAR/MPG"],
+            key=lambda x: -x["Actual WAR/MPG"],
         )
 
         if not editor_rows:

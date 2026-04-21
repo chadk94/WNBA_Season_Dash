@@ -83,6 +83,9 @@ def load_rosters() -> dict:
     return {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()}
 
 
+SEASON_GAMES = 40  # standard WNBA regular season length for WAR normalization
+
+
 @st.cache_data(ttl=3600, show_spinner="Loading player ratings...")
 def load_player_lebron_data() -> list[dict]:
     df = get_player_lebron()
@@ -91,18 +94,33 @@ def load_player_lebron_data() -> list[dict]:
     df = df.copy()
     df["minutes"] = pd.to_numeric(df.get("minutes", 0), errors="coerce").fillna(0)
     df["lebron_war"] = pd.to_numeric(df.get("lebron_war", 0), errors="coerce").fillna(0)
+    if "mpg" not in df.columns:
+        df["mpg"] = df["minutes"] / SEASON_GAMES
+    df["mpg"] = pd.to_numeric(df["mpg"], errors="coerce").fillna(0).round(1)
     df["war_per_min"] = df.apply(
         lambda r: r["lebron_war"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
     )
-    # Use MPG from data if present; otherwise derive from total minutes (fallback only)
-    if "mpg" not in df.columns:
-        df["mpg"] = df["minutes"] / 40  # rough fallback if CSV lacks MPG column
-    df["mpg"] = pd.to_numeric(df["mpg"], errors="coerce").fillna(0).round(1)
-    # WAR per MPG: scaling MPG up/down scales WAR proportionally
+    # war_per_mpg: projected WAR per MPG for a SEASON_GAMES-game season.
+    # For players with actual recorded minutes, normalize to SEASON_GAMES so that
+    # playoff teams aren't inflated vs teams that missed postseason.
+    # For players with 0 minutes (pre-season projections), fall back to lebron_war / mpg.
     df["war_per_mpg"] = df.apply(
-        lambda r: r["lebron_war"] / r["mpg"] if r["mpg"] > 0 else 0.0, axis=1
-    ).round(4)
-    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "war_per_mpg"]].to_dict(orient="records")
+        lambda r: round(r["war_per_min"] * SEASON_GAMES, 4) if r["minutes"] > 0
+        else round(r["lebron_war"] / r["mpg"], 4) if r["mpg"] > 0
+        else 0.0,
+        axis=1,
+    )
+    # Split WAR into offensive and defensive components proportionally from O/D-LEBRON
+    df["o_lebron"] = pd.to_numeric(df.get("o_lebron", 0), errors="coerce").fillna(0)
+    df["d_lebron"] = pd.to_numeric(df.get("d_lebron", 0), errors="coerce").fillna(0)
+    def _split_war(r):
+        total = r["o_lebron"] + r["d_lebron"]
+        o_ratio = r["o_lebron"] / total if total != 0 else 0.5
+        o = round(r["war_per_mpg"] * o_ratio, 4)
+        d = round(r["war_per_mpg"] - o, 4)
+        return pd.Series({"o_war_per_mpg": o, "d_war_per_mpg": d})
+    df[["o_war_per_mpg", "d_war_per_mpg"]] = df.apply(_split_war, axis=1)
+    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "war_per_mpg", "o_war_per_mpg", "d_war_per_mpg"]].to_dict(orient="records")
 
 
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
@@ -125,22 +143,47 @@ def logo_image(team: str, size: int = 40):
 # ── Rotation persistence helpers ─────────────────────────────────────────────
 
 _ROTATION_SAVE_PATH = Path(__file__).parent / "data" / "custom_rotation.json"
+_REDIS_KEY = "wnba_custom_rotation"
 
 
-def _save_rotation_to_disk() -> None:
+def _get_redis():
+    """Return an Upstash Redis client if credentials are configured, else None."""
+    try:
+        from upstash_redis import Redis
+        url = st.secrets.get("UPSTASH_REDIS_REST_URL")
+        token = st.secrets.get("UPSTASH_REDIS_REST_TOKEN")
+        if url and token:
+            return Redis(url=url, token=token)
+    except Exception:
+        pass
+    return None
+
+
+def _save_rotation(redis=None) -> None:
     data = {
         k: float(v)
         for k, v in st.session_state.items()
-        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("war_"))
+        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("o_war_") or k.startswith("d_war_"))
         and isinstance(v, (int, float))
     }
-    _ROTATION_SAVE_PATH.write_text(json.dumps(data, indent=2))
+    payload = json.dumps(data)
+    if redis is not None:
+        redis.set(_REDIS_KEY, payload)
+    else:
+        _ROTATION_SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _ROTATION_SAVE_PATH.write_text(payload)
 
 
-def _load_rotation_from_disk() -> bool:
-    if not _ROTATION_SAVE_PATH.exists():
-        return False
-    data = json.loads(_ROTATION_SAVE_PATH.read_text())
+def _load_rotation(redis=None) -> bool:
+    if redis is not None:
+        payload = redis.get(_REDIS_KEY)
+        if not payload:
+            return False
+        data = json.loads(payload) if isinstance(payload, str) else payload
+    else:
+        if not _ROTATION_SAVE_PATH.exists():
+            return False
+        data = json.loads(_ROTATION_SAVE_PATH.read_text())
     for k, v in data.items():
         st.session_state[k] = float(v)
     return True
@@ -159,7 +202,8 @@ def _compute_effective_team_war(
     if not player_records:
         return baseline
 
-    war_lookup = {r["player"]: r["war_per_mpg"] for r in player_records}
+    o_war_lookup = {r["player"]: r.get("o_war_per_mpg", 0.0) for r in player_records}
+    d_war_lookup = {r["player"]: r.get("d_war_per_mpg", 0.0) for r in player_records}
     mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
     all_teams = set(baseline.keys()) | set(rosters_raw.keys())
@@ -170,13 +214,14 @@ def _compute_effective_team_war(
             effective[team] = baseline.get(team, 0.0)
             continue
 
-        has_lebron = any(war_lookup.get(p, 0.0) > 0 for p in players)
+        has_lebron = any((o_war_lookup.get(p, 0.0) + d_war_lookup.get(p, 0.0)) != 0 for p in players)
         if not has_lebron:
             effective[team] = baseline.get(team, 0.0)
             continue
 
         war_total = sum(
-            st.session_state.get(f"war_{team}_{p}", war_lookup.get(p, 0.0))
+            (st.session_state.get(f"o_war_{team}_{p}", o_war_lookup.get(p, 0.0))
+             + st.session_state.get(f"d_war_{team}_{p}", d_war_lookup.get(p, 0.0)))
             * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
             for p in players
         )
@@ -201,7 +246,8 @@ if schedule_df.empty:
 
 # Auto-load saved rotation once per browser session (must run before simulation)
 if "rotation_file_loaded" not in st.session_state:
-    _load_rotation_from_disk()
+    _redis = _get_redis()
+    _load_rotation(_redis)
     st.session_state["rotation_file_loaded"] = True
 
 effective_team_war = _compute_effective_team_war(player_records, rosters_raw, team_lebron)
@@ -487,12 +533,12 @@ with tab_rotation:
 
     btn_col1, btn_col2, _ = st.columns([1, 1, 6])
     with btn_col1:
-        if st.button("💾 Save", use_container_width=True, help="Save rotation to disk"):
-            _save_rotation_to_disk()
+        if st.button("💾 Save", use_container_width=True, help="Save rotation"):
+            _save_rotation(_get_redis())
             st.success("Rotation saved.")
     with btn_col2:
-        if st.button("📂 Load", use_container_width=True, help="Reload rotation from disk"):
-            if _load_rotation_from_disk():
+        if st.button("📂 Load", use_container_width=True, help="Reload saved rotation"):
+            if _load_rotation(_get_redis()):
                 st.success("Rotation loaded.")
                 st.rerun()
             else:
@@ -502,7 +548,8 @@ with tab_rotation:
         st.info("Roster data not available.")
     else:
         # ── LEBRON lookup by player name ──────────────────────────────────────
-        war_lookup = {r["player"]: r["war_per_mpg"] for r in player_records}
+        o_war_lookup = {r["player"]: r.get("o_war_per_mpg", 0.0) for r in player_records}
+        d_war_lookup = {r["player"]: r.get("d_war_per_mpg", 0.0) for r in player_records}
         mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
@@ -538,15 +585,20 @@ with tab_rotation:
                         f"rot_{selected_rot_abbr}_{p['player']}",
                         round(mpg_lookup.get(p["player"], 0.0), 1),
                     )),
-                    "Actual WAR/MPG": round(war_lookup.get(p["player"], 0.0), 4),
-                    "Custom WAR/MPG": float(st.session_state.get(
-                        f"war_{selected_rot_abbr}_{p['player']}",
-                        round(war_lookup.get(p["player"], 0.0), 4),
+                    "Act O WAR/MPG": round(o_war_lookup.get(p["player"], 0.0), 4),
+                    "Cust O WAR/MPG": float(st.session_state.get(
+                        f"o_war_{selected_rot_abbr}_{p['player']}",
+                        round(o_war_lookup.get(p["player"], 0.0), 4),
+                    )),
+                    "Act D WAR/MPG": round(d_war_lookup.get(p["player"], 0.0), 4),
+                    "Cust D WAR/MPG": float(st.session_state.get(
+                        f"d_war_{selected_rot_abbr}_{p['player']}",
+                        round(d_war_lookup.get(p["player"], 0.0), 4),
                     )),
                 }
                 for p in roster_players if "player" in p
             ],
-            key=lambda x: -x["Actual WAR/MPG"],
+            key=lambda x: -(x["Act O WAR/MPG"] + x["Act D WAR/MPG"]),
         )
 
         if not editor_rows:
@@ -563,10 +615,15 @@ with tab_rotation:
                     "Custom MPG":       st.column_config.NumberColumn(
                         "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
                     ),
-                    "Actual WAR/MPG":   st.column_config.NumberColumn("Actual WAR/MPG", disabled=True, format="%.4f"),
-                    "Custom WAR/MPG":   st.column_config.NumberColumn(
-                        "Custom WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
-                        help="Override WAR rate (WAR per minute-per-game). Defaults to LEBRON value."
+                    "Act O WAR/MPG":    st.column_config.NumberColumn("Act O WAR/MPG", disabled=True, format="%.4f"),
+                    "Cust O WAR/MPG":   st.column_config.NumberColumn(
+                        "Cust O WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
+                        help="Override offensive WAR rate. Defaults to LEBRON-derived value."
+                    ),
+                    "Act D WAR/MPG":    st.column_config.NumberColumn("Act D WAR/MPG", disabled=True, format="%.4f"),
+                    "Cust D WAR/MPG":   st.column_config.NumberColumn(
+                        "Cust D WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
+                        help="Override defensive WAR rate. Defaults to LEBRON-derived value."
                     ),
                 },
                 hide_index=True,
@@ -575,30 +632,39 @@ with tab_rotation:
                 num_rows="fixed",
             )
 
-            # Persist custom MPG and WAR/MPG in session state
+            # Persist custom MPG and O/D WAR/MPG in session state
             for _, row in edited.iterrows():
                 st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom MPG"])
-                st.session_state[f"war_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom WAR/MPG"])
+                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust O WAR/MPG"])
+                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust D WAR/MPG"])
 
             # ── WAR summary metrics ──────────────────────────────────────────
-            edited["Proj WAR"] = edited["Custom MPG"] * edited["Custom WAR/MPG"]
-            actual_war = (editor_df["Actual MPG"] * editor_df["Actual WAR/MPG"]).sum()
+            edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/MPG"]
+            edited["Proj D WAR"] = edited["Custom MPG"] * edited["Cust D WAR/MPG"]
+            edited["Proj WAR"] = edited["Proj O WAR"] + edited["Proj D WAR"]
+            actual_war = (
+                editor_df["Actual MPG"] * (editor_df["Act O WAR/MPG"] + editor_df["Act D WAR/MPG"])
+            ).sum()
             custom_war = edited["Proj WAR"].sum()
+            custom_o_war = edited["Proj O WAR"].sum()
+            custom_d_war = edited["Proj D WAR"].sum()
 
-            mc1, mc2, mc3 = st.columns(3)
+            mc1, mc2, mc3, mc4 = st.columns(4)
             mc1.metric(
                 "Custom Team WAR",
                 f"{custom_war:.2f}",
                 delta=f"{custom_war - actual_war:+.2f} vs baseline",
             )
-            mc2.metric(
+            mc2.metric("Offensive WAR", f"{custom_o_war:.2f}")
+            mc3.metric("Defensive WAR", f"{custom_d_war:.2f}")
+            mc4.metric(
                 "Total Custom MPG",
                 f"{edited['Custom MPG'].sum():.1f}",
                 delta=f"{edited['Custom MPG'].sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
             )
-            mc3.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
 
-            st.caption("Proj WAR = Custom MPG × Custom WAR/MPG. Changes flow into simulations on Save.")
+            st.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
+            st.caption("Proj WAR = Custom MPG × (Cust O WAR/MPG + Cust D WAR/MPG). Changes flow into simulations on Save.")
 
         st.divider()
 

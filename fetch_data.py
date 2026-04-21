@@ -252,6 +252,10 @@ def _load_manual_lebron() -> pd.DataFrame:
                 col_map[c] = "lebron"
             elif "lebron war" in c or c == "lebron war":
                 col_map[c] = "lebron_war"
+            elif c == "o-lebron":
+                col_map[c] = "o_lebron"
+            elif c == "d-lebron":
+                col_map[c] = "d_lebron"
             elif "player" in c or "name" in c:
                 col_map[c] = "player"
             elif c == "team":
@@ -272,7 +276,7 @@ def _load_manual_lebron() -> pd.DataFrame:
         if "minutes" in df.columns:
             df["minutes"] = df["minutes"].astype(str).str.replace(",", "").astype(float)
         print(f"[fetch_data] Loaded manual LEBRON data: {len(df)} rows")
-        keep = [c for c in ["player", "team", "lebron", "lebron_war", "minutes", "mpg"] if c in df.columns]
+        keep = [c for c in ["player", "team", "lebron", "o_lebron", "d_lebron", "lebron_war", "minutes", "mpg"] if c in df.columns]
         return df[keep]
     # Return empty frame — model will handle missing teams gracefully
     return pd.DataFrame(columns=["player", "team", "lebron"])

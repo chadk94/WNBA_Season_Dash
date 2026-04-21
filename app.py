@@ -551,7 +551,9 @@ with tab_rotation:
         mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
-        rot_teams = sorted(rosters_raw.keys(), key=lambda t: TEAM_NAMES.get(t, t))
+        # Union of roster data and all known teams so expansion teams always appear
+        all_known = set(rosters_raw.keys()) | set(TEAM_NAMES.keys())
+        rot_teams = sorted(all_known, key=lambda t: TEAM_NAMES.get(t, t))
         rot_team_options = {TEAM_NAMES.get(t, t): t for t in rot_teams}
 
         selected_rot_name = st.selectbox(

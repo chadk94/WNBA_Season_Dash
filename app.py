@@ -162,16 +162,17 @@ def _compute_effective_team_war(
     war_lookup = {r["player"]: r["war_per_mpg"] for r in player_records}
     mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
+    all_teams = set(baseline.keys()) | set(rosters_raw.keys())
     effective = {}
-    for team in baseline:
+    for team in all_teams:
         players = [p["player"] for p in rosters_raw.get(team, []) if "player" in p]
         if not players:
-            effective[team] = baseline[team]
+            effective[team] = baseline.get(team, 0.0)
             continue
 
         has_lebron = any(war_lookup.get(p, 0.0) > 0 for p in players)
         if not has_lebron:
-            effective[team] = baseline[team]
+            effective[team] = baseline.get(team, 0.0)
             continue
 
         war_total = sum(

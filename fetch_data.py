@@ -399,6 +399,8 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
                 league_id_nullable="10",
             )
             df = roster_ep.get_data_frames()[0]
+            if df.empty:
+                raise ValueError("API returned empty roster")
 
             col_map = {
                 "PLAYER":     "player",
@@ -421,9 +423,15 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
             time.sleep(0.3)  # be polite to the API
         except Exception as e:
             print(f"[fetch_data] Roster fetch failed for {abbr}: {e}")
-            if abbr in stale_cache:
+            if abbr in stale_cache and len(stale_cache[abbr]) > 0:
                 print(f"[fetch_data] Using stale cache for {abbr}")
                 rosters[abbr] = pd.DataFrame(stale_cache[abbr])
+
+    # Preserve any stale entries that still couldn't be fetched
+    for abbr, rows in stale_cache.items():
+        if abbr not in rosters and len(rows) > 0:
+            print(f"[fetch_data] Preserving stale roster for {abbr}")
+            rosters[abbr] = pd.DataFrame(rows)
 
     _save_cache(cache_key, {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()})
     print(f"[fetch_data] Rosters: fetched {len(rosters)}/{len(team_id_map)} teams")

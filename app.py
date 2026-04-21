@@ -529,7 +529,7 @@ with tab_rotation:
         "Team WAR = Σ (WAR/MPG × Custom MPG) across all players."
     )
 
-    btn_col1, btn_col2, _ = st.columns([1, 1, 6])
+    btn_col1, btn_col2, btn_col3, _ = st.columns([1, 1, 1, 5])
     with btn_col1:
         if st.button("💾 Save", use_container_width=True, help="Save rotation"):
             _save_rotation(_get_redis())
@@ -541,6 +541,10 @@ with tab_rotation:
                 st.rerun()
             else:
                 st.info("No saved rotation found.")
+    with btn_col3:
+        if st.button("🔄 Refresh", use_container_width=True, help="Re-fetch rosters from API"):
+            load_rosters.clear()
+            st.rerun()
 
     if not rosters_raw:
         st.info("Roster data not available.")

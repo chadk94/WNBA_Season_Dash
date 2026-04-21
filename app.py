@@ -77,7 +77,7 @@ def load_team_lebron():
         team = r.get("team", "")
         if not team:
             continue
-        team_war[team] = team_war.get(team, 0.0) + r["war_per_mpg"] * r["mpg"]
+        team_war[team] = team_war.get(team, 0.0) + r["war_per_min"] * r["mpg"] * SEASON_GAMES
     return team_war
 
 
@@ -88,7 +88,7 @@ def load_rosters() -> dict:
     return {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()}
 
 
-SEASON_GAMES = 40  # standard WNBA regular season length for WAR normalization
+SEASON_GAMES = 44  # 2026 WNBA regular season length
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading player ratings...")
@@ -102,30 +102,22 @@ def load_player_lebron_data() -> list[dict]:
     if "mpg" not in df.columns:
         df["mpg"] = df["minutes"] / SEASON_GAMES
     df["mpg"] = pd.to_numeric(df["mpg"], errors="coerce").fillna(0).round(1)
+    # war_per_min: LEBRON WAR / total minutes — the pure per-minute rate provided by LEBRON.
+    # Players with 0 recorded minutes (pre-season projections) get 0.
     df["war_per_min"] = df.apply(
         lambda r: r["lebron_war"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
     )
-    # war_per_mpg: projected WAR per MPG for a SEASON_GAMES-game season.
-    # For players with actual recorded minutes, normalize to SEASON_GAMES so that
-    # playoff teams aren't inflated vs teams that missed postseason.
-    # For players with 0 minutes (pre-season projections), fall back to lebron_war / mpg.
-    df["war_per_mpg"] = df.apply(
-        lambda r: round(r["war_per_min"] * SEASON_GAMES, 4) if r["minutes"] > 0
-        else round(r["lebron_war"] / r["mpg"], 4) if r["mpg"] > 0
-        else 0.0,
-        axis=1,
-    )
-    # Split WAR into offensive and defensive components proportionally from O/D-LEBRON
+    # Split into offensive and defensive per-minute rates using O/D-LEBRON proportions
     df["o_lebron"] = pd.to_numeric(df.get("o_lebron", 0), errors="coerce").fillna(0)
     df["d_lebron"] = pd.to_numeric(df.get("d_lebron", 0), errors="coerce").fillna(0)
     def _split_war(r):
         total = r["o_lebron"] + r["d_lebron"]
         o_ratio = r["o_lebron"] / total if total != 0 else 0.5
-        o = round(r["war_per_mpg"] * o_ratio, 4)
-        d = round(r["war_per_mpg"] - o, 4)
-        return pd.Series({"o_war_per_mpg": o, "d_war_per_mpg": d})
-    df[["o_war_per_mpg", "d_war_per_mpg"]] = df.apply(_split_war, axis=1)
-    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "war_per_mpg", "o_war_per_mpg", "d_war_per_mpg"]].to_dict(orient="records")
+        o = round(r["war_per_min"] * o_ratio, 6)
+        d = round(r["war_per_min"] - o, 6)
+        return pd.Series({"o_war_per_min": o, "d_war_per_min": d})
+    df[["o_war_per_min", "d_war_per_min"]] = df.apply(_split_war, axis=1)
+    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "o_war_per_min", "d_war_per_min"]].to_dict(orient="records")
 
 
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
@@ -207,8 +199,8 @@ def _compute_effective_team_war(
     if not player_records:
         return baseline
 
-    o_war_lookup = {r["player"]: r.get("o_war_per_mpg", 0.0) for r in player_records}
-    d_war_lookup = {r["player"]: r.get("d_war_per_mpg", 0.0) for r in player_records}
+    o_war_lookup = {r["player"]: r.get("o_war_per_min", 0.0) for r in player_records}
+    d_war_lookup = {r["player"]: r.get("d_war_per_min", 0.0) for r in player_records}
     mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
     all_teams = set(baseline.keys()) | set(rosters_raw.keys())
@@ -228,6 +220,7 @@ def _compute_effective_team_war(
             (st.session_state.get(f"o_war_{team}_{p}", o_war_lookup.get(p, 0.0))
              + st.session_state.get(f"d_war_{team}_{p}", d_war_lookup.get(p, 0.0)))
             * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
+            * SEASON_GAMES
             for p in players
         )
         effective[team] = war_total
@@ -553,8 +546,8 @@ with tab_rotation:
         st.info("Roster data not available.")
     else:
         # ── LEBRON lookup by player name ──────────────────────────────────────
-        o_war_lookup = {r["player"]: r.get("o_war_per_mpg", 0.0) for r in player_records}
-        d_war_lookup = {r["player"]: r.get("d_war_per_mpg", 0.0) for r in player_records}
+        o_war_lookup = {r["player"]: r.get("o_war_per_min", 0.0) for r in player_records}
+        d_war_lookup = {r["player"]: r.get("d_war_per_min", 0.0) for r in player_records}
         mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
@@ -590,20 +583,20 @@ with tab_rotation:
                         f"rot_{selected_rot_abbr}_{p['player']}",
                         round(mpg_lookup.get(p["player"], 0.0), 1),
                     )),
-                    "Act O WAR/MPG": round(o_war_lookup.get(p["player"], 0.0), 4),
-                    "Cust O WAR/MPG": float(st.session_state.get(
+                    "Act O WAR/min": round(o_war_lookup.get(p["player"], 0.0), 6),
+                    "Cust O WAR/min": float(st.session_state.get(
                         f"o_war_{selected_rot_abbr}_{p['player']}",
-                        round(o_war_lookup.get(p["player"], 0.0), 4),
+                        round(o_war_lookup.get(p["player"], 0.0), 6),
                     )),
-                    "Act D WAR/MPG": round(d_war_lookup.get(p["player"], 0.0), 4),
-                    "Cust D WAR/MPG": float(st.session_state.get(
+                    "Act D WAR/min": round(d_war_lookup.get(p["player"], 0.0), 6),
+                    "Cust D WAR/min": float(st.session_state.get(
                         f"d_war_{selected_rot_abbr}_{p['player']}",
-                        round(d_war_lookup.get(p["player"], 0.0), 4),
+                        round(d_war_lookup.get(p["player"], 0.0), 6),
                     )),
                 }
                 for p in roster_players if "player" in p
             ],
-            key=lambda x: -(x["Act O WAR/MPG"] + x["Act D WAR/MPG"]),
+            key=lambda x: -(x["Act O WAR/min"] + x["Act D WAR/min"]),
         )
 
         if not editor_rows:
@@ -620,15 +613,15 @@ with tab_rotation:
                     "Custom MPG":       st.column_config.NumberColumn(
                         "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
                     ),
-                    "Act O WAR/MPG":    st.column_config.NumberColumn("Act O WAR/MPG", disabled=True, format="%.4f"),
-                    "Cust O WAR/MPG":   st.column_config.NumberColumn(
-                        "Cust O WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
-                        help="Override offensive WAR rate. Defaults to LEBRON-derived value."
+                    "Act O WAR/min":    st.column_config.NumberColumn("Act O WAR/min", disabled=True, format="%.6f"),
+                    "Cust O WAR/min":   st.column_config.NumberColumn(
+                        "Cust O WAR/min", min_value=-0.05, max_value=0.05, step=0.0001, format="%.6f",
+                        help="Offensive WAR per minute (LEBRON WAR/min, O share). Override if needed."
                     ),
-                    "Act D WAR/MPG":    st.column_config.NumberColumn("Act D WAR/MPG", disabled=True, format="%.4f"),
-                    "Cust D WAR/MPG":   st.column_config.NumberColumn(
-                        "Cust D WAR/MPG", min_value=-1.0, max_value=1.0, step=0.001, format="%.4f",
-                        help="Override defensive WAR rate. Defaults to LEBRON-derived value."
+                    "Act D WAR/min":    st.column_config.NumberColumn("Act D WAR/min", disabled=True, format="%.6f"),
+                    "Cust D WAR/min":   st.column_config.NumberColumn(
+                        "Cust D WAR/min", min_value=-0.05, max_value=0.05, step=0.0001, format="%.6f",
+                        help="Defensive WAR per minute (LEBRON WAR/min, D share). Override if needed."
                     ),
                 },
                 hide_index=True,
@@ -637,18 +630,18 @@ with tab_rotation:
                 num_rows="fixed",
             )
 
-            # Persist custom MPG and O/D WAR/MPG in session state
+            # Persist custom MPG and O/D WAR/min in session state
             for _, row in edited.iterrows():
                 st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom MPG"])
-                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust O WAR/MPG"])
-                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust D WAR/MPG"])
+                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust O WAR/min"])
+                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust D WAR/min"])
 
             # ── WAR summary metrics ──────────────────────────────────────────
-            edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/MPG"]
-            edited["Proj D WAR"] = edited["Custom MPG"] * edited["Cust D WAR/MPG"]
+            edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/min"] * SEASON_GAMES
+            edited["Proj D WAR"] = edited["Custom MPG"] * edited["Cust D WAR/min"] * SEASON_GAMES
             edited["Proj WAR"] = edited["Proj O WAR"] + edited["Proj D WAR"]
             actual_war = (
-                editor_df["Actual MPG"] * (editor_df["Act O WAR/MPG"] + editor_df["Act D WAR/MPG"])
+                editor_df["Actual MPG"] * (editor_df["Act O WAR/min"] + editor_df["Act D WAR/min"]) * SEASON_GAMES
             ).sum()
             custom_war = edited["Proj WAR"].sum()
             custom_o_war = edited["Proj O WAR"].sum()
@@ -669,7 +662,7 @@ with tab_rotation:
             )
 
             st.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
-            st.caption("Proj WAR = Custom MPG × (Cust O WAR/MPG + Cust D WAR/MPG). Changes flow into simulations on Save.")
+            st.caption("Proj WAR = Custom MPG × (Cust O WAR/min + Cust D WAR/min) × 40 games. Changes flow into simulations on Save.")
 
         st.divider()
 

@@ -351,6 +351,16 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
     if cached:
         return {abbr: pd.DataFrame(rows) for abbr, rows in cached.items()}
 
+    # Load stale cache as a fallback for teams whose fresh API fetch fails
+    stale_cache = {}
+    stale_path = _cache_path(cache_key)
+    if stale_path.exists():
+        try:
+            import json as _json
+            stale_cache = _json.loads(stale_path.read_text())
+        except Exception:
+            pass
+
     season_str = f"{season}-{str(season + 1)[-2:]}"
 
     try:
@@ -379,7 +389,7 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
         print("[fetch_data] No WNBA teams found in static data.")
         return {}
 
-    # Fetch roster for each team
+    # Fetch roster for each team; fall back to stale cache entry on failure
     rosters = {}
     for abbr, team_id in sorted(team_id_map.items()):
         try:
@@ -411,6 +421,9 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
             time.sleep(0.3)  # be polite to the API
         except Exception as e:
             print(f"[fetch_data] Roster fetch failed for {abbr}: {e}")
+            if abbr in stale_cache:
+                print(f"[fetch_data] Using stale cache for {abbr}")
+                rosters[abbr] = pd.DataFrame(stale_cache[abbr])
 
     _save_cache(cache_key, {abbr: df.to_dict(orient="records") for abbr, df in rosters.items()})
     print(f"[fetch_data] Rosters: fetched {len(rosters)}/{len(team_id_map)} teams")

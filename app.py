@@ -628,7 +628,6 @@ with tab_rotation:
                 },
                 hide_index=True,
                 use_container_width=True,
-                key=f"editor_{selected_rot_abbr}",
                 num_rows="fixed",
             )
 

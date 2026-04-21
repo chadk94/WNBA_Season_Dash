@@ -18,7 +18,6 @@ from PIL import Image
 from fetch_data import (
     TEAM_NAMES,
     get_schedule,
-    get_team_lebron,
     get_team_rosters,
     get_player_lebron,
     get_team_logo,
@@ -69,11 +68,17 @@ def load_schedule():
     return get_schedule(SEASON)
 
 
-@st.cache_data(ttl=3600, show_spinner="Loading LEBRON ratings...")
 def load_team_lebron():
-    player_df = get_player_lebron()
-    rosters = get_team_rosters(SEASON)
-    return get_team_lebron(player_df, rosters)
+    # Derived from normalized player records so the simulation baseline matches
+    # the same 40-game scale used in the rotation builder.
+    records = load_player_lebron_data()
+    team_war: dict[str, float] = {}
+    for r in records:
+        team = r.get("team", "")
+        if not team:
+            continue
+        team_war[team] = team_war.get(team, 0.0) + r["war_per_mpg"] * r["mpg"]
+    return team_war
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading rosters...")
@@ -254,7 +259,7 @@ effective_team_war = _compute_effective_team_war(player_records, rosters_raw, te
 
 sim_results = load_simulation(
     schedule_df.to_json(orient="records"),
-    json.dumps(effective_team_war),
+    json.dumps(effective_team_war, sort_keys=True),
 )
 
 # ── Header ───────────────────────────────────────────────────────────────────

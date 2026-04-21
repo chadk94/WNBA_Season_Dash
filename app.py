@@ -617,16 +617,16 @@ with tab_rotation:
                     "Pos":              st.column_config.TextColumn("Pos", disabled=True),
                     "Actual MPG":       st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
                     "Custom MPG":       st.column_config.NumberColumn(
-                        "Custom MPG", min_value=0.0, max_value=40.0, step=1.0, format="%.1f"
+                        "Custom MPG", min_value=0.0, max_value=40.0, step=0.5, format="%.1f"
                     ),
                     "Act O WAR/min":    st.column_config.NumberColumn("Act O WAR/min", disabled=True, format="%.6f"),
                     "Cust O WAR/min":   st.column_config.NumberColumn(
-                        "Cust O WAR/min", min_value=-0.05, max_value=0.05, step=0.0001, format="%.6f",
+                        "Cust O WAR/min", min_value=-0.05, max_value=0.05, step=0.000001, format="%.6f",
                         help="Offensive WAR per minute (LEBRON WAR/min, O share). Override if needed."
                     ),
                     "Act D WAR/min":    st.column_config.NumberColumn("Act D WAR/min", disabled=True, format="%.6f"),
                     "Cust D WAR/min":   st.column_config.NumberColumn(
-                        "Cust D WAR/min", min_value=-0.05, max_value=0.05, step=0.0001, format="%.6f",
+                        "Cust D WAR/min", min_value=-0.05, max_value=0.05, step=0.000001, format="%.6f",
                         help="Defensive WAR per minute (LEBRON WAR/min, D share). Override if needed."
                     ),
                 },
@@ -635,11 +635,13 @@ with tab_rotation:
                 num_rows="fixed",
             )
 
-            # Persist custom MPG and O/D WAR/min in session state
+            # Persist custom MPG and O/D WAR/min in session state.
+            # Round to display precision so the stored value exactly matches the
+            # formatted column value, keeping the metric and column sum in sync.
             for _, row in edited.iterrows():
-                st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = float(row["Custom MPG"])
-                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust O WAR/min"])
-                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = float(row["Cust D WAR/min"])
+                st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Custom MPG"]), 1)
+                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust O WAR/min"]), 6)
+                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust D WAR/min"]), 6)
 
             # ── WAR summary metrics ──────────────────────────────────────────
             edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/min"] * SEASON_GAMES
@@ -662,8 +664,8 @@ with tab_rotation:
             mc3.metric("Defensive WAR", f"{custom_d_war:.2f}")
             mc4.metric(
                 "Total Custom MPG",
-                f"{edited['Custom MPG'].sum():.1f}",
-                delta=f"{edited['Custom MPG'].sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
+                f"{edited['Custom MPG'].round(1).sum():.1f}",
+                delta=f"{edited['Custom MPG'].round(1).sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
             )
 
             st.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))

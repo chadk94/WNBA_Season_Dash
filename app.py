@@ -729,6 +729,7 @@ with tab_rotation:
 
             edited = st.data_editor(
                 editor_df,
+                key=f"rotation_editor_{selected_rot_abbr}",
                 column_config={
                     "Player":      st.column_config.TextColumn("Player", disabled=True),
                     "Pos":         st.column_config.TextColumn("Pos", disabled=True),

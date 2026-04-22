@@ -90,6 +90,86 @@ def load_rosters() -> dict:
 
 SEASON_GAMES = 44  # 2026 WNBA regular season length
 
+# Google Sheets rotation minutes — base spreadsheet ID
+_SHEETS_ID = "15lSFSwU_eyt8kE2Ti7SYWKq9eLqKOjJnfZ60Z3USxRI"
+
+
+def _import_minutes_from_sheets(team_abbr: str, roster_players: list[dict]) -> tuple[int, list[str]]:
+    """
+    Fetch player minutes from the Google Sheets MPG doc (one tab per team)
+    and write them into session state for the given team.
+    Matches on last name (case-insensitive).
+    Slash-separated entries like 'Clark/Prosper' split minutes evenly.
+    Returns (count_matched, unmatched_names).
+    """
+    from io import StringIO
+    import urllib.request
+    import urllib.parse
+
+    # Try team abbreviation first, then full team name as sheet tab name
+    team_full = TEAM_NAMES.get(team_abbr, team_abbr)
+    sheet_df = None
+    last_err = None
+    for sheet_name in [team_abbr, team_full]:
+        encoded = urllib.parse.quote(sheet_name)
+        url = (
+            f"https://docs.google.com/spreadsheets/d/{_SHEETS_ID}"
+            f"/gviz/tq?tqx=out:csv&sheet={encoded}"
+        )
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("utf-8")
+            candidate = pd.read_csv(StringIO(raw))
+            # A valid sheet has a "Player Name" column; error pages won't
+            if "Player Name" in candidate.columns:
+                sheet_df = candidate
+                break
+        except Exception as e:
+            last_err = e
+
+    if sheet_df is None:
+        raise RuntimeError(
+            f"Could not find a sheet tab for '{team_abbr}' or '{team_full}'. "
+            f"Last error: {last_err}"
+        )
+
+    # Build last-name → full player name lookup for this team's roster
+    last_to_full: dict[str, str] = {}
+    for p in roster_players:
+        if "player" not in p:
+            continue
+        full = p["player"]
+        last = full.split()[-1].lower()
+        last_to_full[last] = full
+
+    matched = 0
+    unmatched: list[str] = []
+
+    for _, row in sheet_df.iterrows():
+        cell = str(row.get("Player Name", "")).strip()
+        if not cell or cell.lower() == "total":
+            continue
+        try:
+            total_min = float(row.get("Total", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        if total_min <= 0:
+            continue
+
+        parts = [n.strip() for n in cell.split("/")]
+        per_player = round(total_min / len(parts), 1)
+
+        for name in parts:
+            full = last_to_full.get(name.lower())
+            if full:
+                st.session_state[f"rot_{team_abbr}_{full}"] = per_player
+                matched += 1
+            else:
+                unmatched.append(name)
+
+    return matched, unmatched
+
 
 @st.cache_data(ttl=3600, show_spinner="Loading player ratings...")
 def load_player_lebron_data() -> list[dict]:
@@ -529,7 +609,7 @@ with tab_rotation:
         "Team WAR = Σ (WAR/MPG × Custom MPG) across all players."
     )
 
-    btn_col1, btn_col2, btn_col3, _ = st.columns([1, 1, 1, 5])
+    btn_col1, btn_col2, btn_col3, btn_col4, _ = st.columns([1, 1, 1, 1, 3])
     with btn_col1:
         if st.button("💾 Save", use_container_width=True, help="Save rotation"):
             _save_rotation(_get_redis())
@@ -545,6 +625,8 @@ with tab_rotation:
         if st.button("🔄 Refresh", use_container_width=True, help="Re-fetch rosters from API"):
             load_rosters.clear()
             st.rerun()
+    with btn_col4:
+        import_clicked = st.button("📋 Sheets", use_container_width=True, help="Import MPG from Google Sheets")
 
     if not rosters_raw:
         st.info("Roster data not available.")
@@ -577,8 +659,23 @@ with tab_rotation:
         with name_col:
             st.subheader(selected_rot_name)
 
-        # Build editor rows from API roster, joined to LEBRON data by name
+        # Handle Sheets import (must know selected team + roster first)
         roster_players = rosters_raw.get(selected_rot_abbr, [])
+        if import_clicked:
+            try:
+                n, unmatched = _import_minutes_from_sheets(selected_rot_abbr, roster_players)
+                if n:
+                    msg = f"Imported minutes for {n} player(s)."
+                    if unmatched:
+                        msg += f" Unmatched: {', '.join(unmatched)}."
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.warning(f"No players matched. Unmatched: {', '.join(unmatched) or 'none'}.")
+            except Exception as e:
+                st.error(f"Import failed: {e}")
+
+        # Build editor rows from API roster, joined to LEBRON data by name
         editor_rows = sorted(
             [
                 {

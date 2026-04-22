@@ -31,13 +31,15 @@ class SimResults:
 
     @property
     def projected_wins(self) -> pd.DataFrame:
-        """Returns DataFrame with median, mean, std projected wins per team."""
+        """Returns DataFrame with median, p10, p90, and actual wins per team."""
         total = self.wins_matrix  # already includes actual wins
         return pd.DataFrame({
             "team": self.teams,
             "median_wins": np.median(total, axis=1),
             "mean_wins": np.mean(total, axis=1),
             "std_wins": np.std(total, axis=1),
+            "p10_wins": np.percentile(total, 10, axis=1),
+            "p90_wins": np.percentile(total, 90, axis=1),
             "actual_wins": [self.actual_wins.get(t, 0) for t in self.teams],
         }).sort_values("median_wins", ascending=False).reset_index(drop=True)
 

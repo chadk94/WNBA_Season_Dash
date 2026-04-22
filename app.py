@@ -849,12 +849,15 @@ with tab_players:
             act_d = round(r.get("d_lebron", 0.0), 2)
             cust_o = round(st.session_state.get(f"o_lbr_{team}_{name}", act_o), 2)
             cust_d = round(st.session_state.get(f"d_lbr_{team}_{name}", act_d), 2)
+            act_mpg = round(r["mpg"], 1)
+            cust_mpg = round(st.session_state.get(f"rot_{team}_{name}", act_mpg), 1)
             ranking_rows.append({
                 "Player":      name,
                 "Team":        team,
                 "Pos":         pos_lookup.get(_norm(name), ""),
                 "Minutes":     int(r.get("minutes", 0)),
-                "MPG":         round(r["mpg"], 1),
+                "MPG":         act_mpg,
+                "Cust MPG":    cust_mpg,
                 "O-LEBRON":    act_o,
                 "D-LEBRON":    act_d,
                 "LEBRON":      round(r.get("lebron", 0.0), 2),
@@ -897,6 +900,7 @@ with tab_players:
             height=min(700, 36 + len(display_rankings) * 35),
             column_config={
                 "MPG":         st.column_config.NumberColumn("MPG", format="%.1f"),
+                "Cust MPG":    st.column_config.NumberColumn("Cust MPG", format="%.1f"),
                 "O-LEBRON":    st.column_config.NumberColumn("O-LEBRON", format="%.2f"),
                 "D-LEBRON":    st.column_config.NumberColumn("D-LEBRON", format="%.2f"),
                 "LEBRON":      st.column_config.NumberColumn("LEBRON", format="%.2f"),

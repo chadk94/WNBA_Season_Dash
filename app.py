@@ -845,17 +845,20 @@ with tab_players:
     if not player_records:
         st.info("Player rating data is not yet available.")
     else:
-        # Build position lookup from rosters
+        # Build position and team lookups from rosters (authoritative source)
         pos_lookup: dict[str, str] = {}
+        roster_team_lookup: dict[str, str] = {}
         for _team, _players in rosters_raw.items():
             for _p in _players:
                 if "player" in _p:
-                    pos_lookup[_norm(_p["player"])] = _p.get("position", "")
+                    _key = _norm(_p["player"])
+                    pos_lookup[_key] = _p.get("position", "")
+                    roster_team_lookup[_key] = _team
 
         ranking_rows = []
         for r in player_records:
             name = r["player"]
-            team = r.get("team", "")
+            team = roster_team_lookup.get(_norm(name), r.get("team", ""))
             act_o = round(r.get("o_lebron", 0.0), 2)
             act_d = round(r.get("d_lebron", 0.0), 2)
             cust_o = round(st.session_state.get(f"o_lbr_{team}_{name}", act_o), 2)

@@ -702,7 +702,7 @@ with tab_rotation:
                 }
                 for p in roster_players if "player" in p
             ],
-            key=lambda x: -(x["Act O-LBR"] + x["Act D-LBR"]),
+            key=lambda x: -x["Custom MPG"],
         )
 
         if not editor_rows:
@@ -828,15 +828,23 @@ with tab_players:
         ranking_rows = []
         for r in player_records:
             name = r["player"]
+            team = r.get("team", "")
+            act_o = round(r.get("o_lebron", 0.0), 2)
+            act_d = round(r.get("d_lebron", 0.0), 2)
+            cust_o = round(st.session_state.get(f"o_lbr_{team}_{name}", act_o), 2)
+            cust_d = round(st.session_state.get(f"d_lbr_{team}_{name}", act_d), 2)
             ranking_rows.append({
-                "Player":    name,
-                "Team":      r.get("team", ""),
-                "Pos":       pos_lookup.get(_norm(name), ""),
-                "Minutes":   int(r.get("minutes", 0)),
-                "MPG":       round(r["mpg"], 1),
-                "O-LEBRON":  round(r.get("o_lebron", 0.0), 2),
-                "D-LEBRON":  round(r.get("d_lebron", 0.0), 2),
-                "LEBRON":    round(r.get("lebron", 0.0), 2),
+                "Player":      name,
+                "Team":        team,
+                "Pos":         pos_lookup.get(_norm(name), ""),
+                "Minutes":     int(r.get("minutes", 0)),
+                "MPG":         round(r["mpg"], 1),
+                "O-LEBRON":    act_o,
+                "D-LEBRON":    act_d,
+                "LEBRON":      round(r.get("lebron", 0.0), 2),
+                "Cust O-LBR":  cust_o,
+                "Cust D-LBR":  cust_d,
+                "Cust LEBRON": round(cust_o + cust_d, 2),
             })
 
         rankings_df = (
@@ -867,9 +875,12 @@ with tab_players:
             use_container_width=True,
             height=min(700, 36 + len(display_rankings) * 35),
             column_config={
-                "MPG":       st.column_config.NumberColumn("MPG", format="%.1f"),
-                "O-LEBRON":  st.column_config.NumberColumn("O-LEBRON", format="%.2f"),
-                "D-LEBRON":  st.column_config.NumberColumn("D-LEBRON", format="%.2f"),
-                "LEBRON":    st.column_config.NumberColumn("LEBRON", format="%.2f"),
+                "MPG":         st.column_config.NumberColumn("MPG", format="%.1f"),
+                "O-LEBRON":    st.column_config.NumberColumn("O-LEBRON", format="%.2f"),
+                "D-LEBRON":    st.column_config.NumberColumn("D-LEBRON", format="%.2f"),
+                "LEBRON":      st.column_config.NumberColumn("LEBRON", format="%.2f"),
+                "Cust O-LBR":  st.column_config.NumberColumn("Cust O-LBR", format="%.2f"),
+                "Cust D-LBR":  st.column_config.NumberColumn("Cust D-LBR", format="%.2f"),
+                "Cust LEBRON": st.column_config.NumberColumn("Cust LEBRON", format="%.2f"),
             },
         )

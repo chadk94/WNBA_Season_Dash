@@ -319,6 +319,11 @@ team_lebron = load_team_lebron()
 player_records = load_player_lebron_data()
 rosters_raw = load_rosters()
 
+# Strip preseason — regular season starts May 7 2026
+REGULAR_SEASON_START = "2026-05-07"
+if not schedule_df.empty:
+    schedule_df = schedule_df[schedule_df["date"] >= REGULAR_SEASON_START].reset_index(drop=True)
+
 if schedule_df.empty:
     st.warning(
         "⚠️ Schedule data is not yet available for the 2026 WNBA season. "

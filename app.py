@@ -474,7 +474,7 @@ with tab_season:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig_wins, use_container_width=True)
+    st.plotly_chart(fig_wins, width="stretch")
 
     st.divider()
 
@@ -510,7 +510,7 @@ with tab_season:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig_playoff, use_container_width=True)
+    st.plotly_chart(fig_playoff, width="stretch")
 
     st.divider()
 
@@ -543,7 +543,7 @@ with tab_season:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig_heat, use_container_width=True)
+    st.plotly_chart(fig_heat, width="stretch")
 
     st.caption(
         "Win probabilities derived from team LEBRON totals (Basketball Index) "
@@ -607,7 +607,7 @@ with tab_rosters:
 
             st.dataframe(
                 display,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=min(600, 36 + len(display) * 35),
             )
@@ -626,22 +626,22 @@ with tab_rotation:
 
     btn_col1, btn_col2, btn_col3, btn_col4, _ = st.columns([1, 1, 1, 1, 3])
     with btn_col1:
-        if st.button("💾 Save", use_container_width=True, help="Save rotation"):
+        if st.button("💾 Save", width="stretch", help="Save rotation"):
             _save_rotation(_get_redis())
             st.success("Rotation saved.")
     with btn_col2:
-        if st.button("📂 Load", use_container_width=True, help="Reload saved rotation"):
+        if st.button("📂 Load", width="stretch", help="Reload saved rotation"):
             if _load_rotation(_get_redis()):
                 st.success("Rotation loaded.")
                 st.rerun()
             else:
                 st.info("No saved rotation found.")
     with btn_col3:
-        if st.button("🔄 Refresh", use_container_width=True, help="Re-fetch rosters from API"):
+        if st.button("🔄 Refresh", width="stretch", help="Re-fetch rosters from API"):
             load_rosters.clear()
             st.rerun()
     with btn_col4:
-        import_clicked = st.button("📋 Sheets", use_container_width=True, help="Import MPG from Google Sheets")
+        import_clicked = st.button("📋 Sheets", width="stretch", help="Import MPG from Google Sheets")
 
     if not rosters_raw:
         st.info("Roster data not available.")
@@ -750,7 +750,7 @@ with tab_rotation:
                     "Last Edited": st.column_config.TextColumn("Last Edited", disabled=True),
                 },
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 num_rows="fixed",
             )
 
@@ -827,7 +827,7 @@ with tab_rotation:
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_league, use_container_width=True)
+        st.plotly_chart(fig_league, width="stretch")
 
         st.caption(
             "Orange bars = teams with custom rotations set. "
@@ -911,7 +911,7 @@ with tab_players:
 
         st.dataframe(
             display_rankings,
-            use_container_width=True,
+            width="stretch",
             height=min(700, 36 + len(display_rankings) * 35),
             column_config={
                 "MPG":         st.column_config.NumberColumn("MPG", format="%.1f"),

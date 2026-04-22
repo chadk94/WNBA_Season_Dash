@@ -8,6 +8,7 @@ import base64
 import io
 import json
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -240,7 +241,7 @@ def _save_rotation(redis=None) -> None:
     data = {
         k: float(v)
         for k, v in st.session_state.items()
-        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("o_lbr_") or k.startswith("d_lbr_"))
+        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("o_lbr_") or k.startswith("d_lbr_") or k.startswith("ts_"))
         and isinstance(v, (int, float))
     }
     payload = json.dumps(data)
@@ -699,6 +700,11 @@ with tab_rotation:
                         f"d_lbr_{selected_rot_abbr}_{p['player']}",
                         round(d_lbr_lookup.get(_norm(p["player"]), 0.0), 2),
                     )),
+                    "Last Edited": (
+                        datetime.fromtimestamp(ts).strftime("%b %d %H:%M")
+                        if (ts := st.session_state.get(f"ts_{selected_rot_abbr}_{p['player']}"))
+                        else ""
+                    ),
                 }
                 for p in roster_players if "player" in p
             ],
@@ -724,11 +730,12 @@ with tab_rotation:
                         "Cust O-LBR", min_value=-5.0, max_value=15.0, step=0.1, format="%.2f",
                         help="Offensive LEBRON (seasonal total). Override if needed."
                     ),
-                    "Act D-LBR":  st.column_config.NumberColumn("Act D-LBR", disabled=True, format="%.2f"),
-                    "Cust D-LBR": st.column_config.NumberColumn(
+                    "Act D-LBR":   st.column_config.NumberColumn("Act D-LBR", disabled=True, format="%.2f"),
+                    "Cust D-LBR":  st.column_config.NumberColumn(
                         "Cust D-LBR", min_value=-5.0, max_value=15.0, step=0.1, format="%.2f",
                         help="Defensive LEBRON (seasonal total). Override if needed."
                     ),
+                    "Last Edited": st.column_config.TextColumn("Last Edited", disabled=True),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -736,9 +743,18 @@ with tab_rotation:
             )
 
             for _, row in edited.iterrows():
-                st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Custom MPG"]), 1)
-                st.session_state[f"o_lbr_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust O-LBR"]), 2)
-                st.session_state[f"d_lbr_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust D-LBR"]), 2)
+                p = row["Player"]
+                t = selected_rot_abbr
+                new_mpg = round(float(row["Custom MPG"]), 1)
+                new_o   = round(float(row["Cust O-LBR"]), 2)
+                new_d   = round(float(row["Cust D-LBR"]), 2)
+                if (new_mpg != st.session_state.get(f"rot_{t}_{p}")
+                        or new_o != st.session_state.get(f"o_lbr_{t}_{p}")
+                        or new_d != st.session_state.get(f"d_lbr_{t}_{p}")):
+                    st.session_state[f"ts_{t}_{p}"] = datetime.now().timestamp()
+                st.session_state[f"rot_{t}_{p}"]   = new_mpg
+                st.session_state[f"o_lbr_{t}_{p}"] = new_o
+                st.session_state[f"d_lbr_{t}_{p}"] = new_d
 
             # ── Team LEBRON metrics ──────────────────────────────────────────
             edited["Cust LEBRON"] = edited["Cust O-LBR"] + edited["Cust D-LBR"]
@@ -845,6 +861,11 @@ with tab_players:
                 "Cust O-LBR":  cust_o,
                 "Cust D-LBR":  cust_d,
                 "Cust LEBRON": round(cust_o + cust_d, 2),
+                "Last Edited": (
+                    datetime.fromtimestamp(ts).strftime("%b %d %H:%M")
+                    if (ts := st.session_state.get(f"ts_{team}_{name}"))
+                    else ""
+                ),
             })
 
         rankings_df = (
@@ -882,5 +903,6 @@ with tab_players:
                 "Cust O-LBR":  st.column_config.NumberColumn("Cust O-LBR", format="%.2f"),
                 "Cust D-LBR":  st.column_config.NumberColumn("Cust D-LBR", format="%.2f"),
                 "Cust LEBRON": st.column_config.NumberColumn("Cust LEBRON", format="%.2f"),
+                "Last Edited": st.column_config.TextColumn("Last Edited"),
             },
         )

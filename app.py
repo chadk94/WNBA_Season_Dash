@@ -632,7 +632,9 @@ with tab_rotation:
     with btn_col2:
         if st.button("📂 Load", width="stretch", help="Reload saved rotation"):
             if _load_rotation(_get_redis()):
-                st.success("Rotation loaded.")
+                # Clear frozen editor data + widget state so they re-seed from loaded values
+                for _k in [f"editor_frozen_{selected_rot_abbr}", f"rotation_editor_{selected_rot_abbr}"]:
+                    st.session_state.pop(_k, None)
                 st.rerun()
             else:
                 st.info("No saved rotation found.")
@@ -683,7 +685,8 @@ with tab_rotation:
                     msg = f"Imported minutes for {n} player(s)."
                     if unmatched:
                         msg += f" Unmatched: {', '.join(unmatched)}."
-                    st.success(msg)
+                    for _k in [f"editor_frozen_{selected_rot_abbr}", f"rotation_editor_{selected_rot_abbr}"]:
+                        st.session_state.pop(_k, None)
                     st.rerun()
                 else:
                     st.warning(f"No players matched. Unmatched: {', '.join(unmatched) or 'none'}.")
@@ -725,7 +728,13 @@ with tab_rotation:
         if not editor_rows:
             st.info("No roster data available for this team.")
         else:
-            editor_df = pd.DataFrame(editor_rows)
+            # Freeze editor_df so the data argument never changes mid-session.
+            # Changing data causes st.data_editor to reset its edit state, causing reversions.
+            # Re-freeze only on explicit actions (Load, Sheets import, team switch).
+            _frozen_key = f"editor_frozen_{selected_rot_abbr}"
+            if _frozen_key not in st.session_state:
+                st.session_state[_frozen_key] = pd.DataFrame(editor_rows)
+            editor_df = st.session_state[_frozen_key]
 
             edited = st.data_editor(
                 editor_df,

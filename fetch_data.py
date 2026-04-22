@@ -241,7 +241,7 @@ def _load_manual_lebron() -> pd.DataFrame:
     """Load from data/lebron_manual.csv if it exists (columns: team, lebron)."""
     manual_path = DATA_DIR / "lebron_manual.csv"
     if manual_path.exists():
-        df = pd.read_csv(manual_path)
+        df = pd.read_csv(manual_path, encoding="utf-8-sig")
         # Normalize column names to lowercase
         df.columns = [c.strip().lower() for c in df.columns]
         # Map 'lebron war' or other variants — keep only what we need

@@ -376,8 +376,8 @@ with tab_season:
                 col = cols[i % len(cols)]
                 home = game["home_team"]
                 away = game["away_team"]
-                home_lbr = team_lebron.get(home, 0.0)
-                away_lbr = team_lebron.get(away, 0.0)
+                home_lbr = effective_team_war.get(home, 0.0)
+                away_lbr = effective_team_war.get(away, 0.0)
                 home_wp = win_probability(home_lbr, away_lbr)
                 away_wp = 1.0 - home_wp
                 spread = win_prob_to_spread(home_wp)

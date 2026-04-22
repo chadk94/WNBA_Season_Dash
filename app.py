@@ -197,7 +197,10 @@ def load_player_lebron_data() -> list[dict]:
         d = round(r["war_per_min"] - o, 6)
         return pd.Series({"o_war_per_min": o, "d_war_per_min": d})
     df[["o_war_per_min", "d_war_per_min"]] = df.apply(_split_war, axis=1)
-    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min", "o_war_per_min", "d_war_per_min"]].to_dict(orient="records")
+    df["o_war_per_40"] = (df["o_war_per_min"] * 40).round(3)
+    df["d_war_per_40"] = (df["d_war_per_min"] * 40).round(3)
+    return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min",
+               "o_war_per_min", "d_war_per_min", "o_war_per_40", "d_war_per_40"]].to_dict(orient="records")
 
 
 @st.cache_data(ttl=3600, show_spinner="Running simulations...")
@@ -240,7 +243,7 @@ def _save_rotation(redis=None) -> None:
     data = {
         k: float(v)
         for k, v in st.session_state.items()
-        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("o_war_") or k.startswith("d_war_"))
+        if isinstance(k, str) and (k.startswith("rot_") or k.startswith("o_war40_") or k.startswith("d_war40_"))
         and isinstance(v, (int, float))
     }
     payload = json.dumps(data)
@@ -279,8 +282,8 @@ def _compute_effective_team_war(
     if not player_records:
         return baseline
 
-    o_war_lookup = {r["player"]: r.get("o_war_per_min", 0.0) for r in player_records}
-    d_war_lookup = {r["player"]: r.get("d_war_per_min", 0.0) for r in player_records}
+    o_war_lookup = {r["player"]: r.get("o_war_per_40", 0.0) for r in player_records}
+    d_war_lookup = {r["player"]: r.get("d_war_per_40", 0.0) for r in player_records}
     mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
     all_teams = set(baseline.keys()) | set(rosters_raw.keys())
@@ -297,10 +300,10 @@ def _compute_effective_team_war(
             continue
 
         war_total = sum(
-            (st.session_state.get(f"o_war_{team}_{p}", o_war_lookup.get(p, 0.0))
-             + st.session_state.get(f"d_war_{team}_{p}", d_war_lookup.get(p, 0.0)))
+            (st.session_state.get(f"o_war40_{team}_{p}", o_war_lookup.get(p, 0.0))
+             + st.session_state.get(f"d_war40_{team}_{p}", d_war_lookup.get(p, 0.0)))
             * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
-            * SEASON_GAMES
+            * SEASON_GAMES / 40
             for p in players
         )
         effective[team] = war_total
@@ -348,7 +351,7 @@ col_meta3.metric("Simulations", "1,000")
 
 st.divider()
 
-tab_season, tab_rosters, tab_rotation = st.tabs(["Season Projections", "Rosters", "Rotation Builder"])
+tab_season, tab_rosters, tab_rotation, tab_players = st.tabs(["Season Projections", "Rosters", "Rotation Builder", "Player Rankings"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — SEASON PROJECTIONS
@@ -606,7 +609,7 @@ with tab_rotation:
     st.markdown('<div class="section-header">⚙️ Rotation Builder</div>', unsafe_allow_html=True)
     st.caption(
         "Set minutes per game (MPG) for each player (max 40). "
-        "Team WAR = Σ (WAR/MPG × Custom MPG) across all players."
+        "Team WAR = Σ (WAR/40 × Custom MPG ÷ 40) across all players."
     )
 
     btn_col1, btn_col2, btn_col3, btn_col4, _ = st.columns([1, 1, 1, 1, 3])
@@ -632,8 +635,8 @@ with tab_rotation:
         st.info("Roster data not available.")
     else:
         # ── LEBRON lookup by player name ──────────────────────────────────────
-        o_war_lookup = {r["player"]: r.get("o_war_per_min", 0.0) for r in player_records}
-        d_war_lookup = {r["player"]: r.get("d_war_per_min", 0.0) for r in player_records}
+        o_war_lookup = {r["player"]: r.get("o_war_per_40", 0.0) for r in player_records}
+        d_war_lookup = {r["player"]: r.get("d_war_per_40", 0.0) for r in player_records}
         mpg_lookup = {r["player"]: r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
@@ -686,20 +689,23 @@ with tab_rotation:
                         f"rot_{selected_rot_abbr}_{p['player']}",
                         round(mpg_lookup.get(p["player"], 0.0), 1),
                     )),
-                    "Act O WAR/min": round(o_war_lookup.get(p["player"], 0.0), 6),
-                    "Cust O WAR/min": float(st.session_state.get(
-                        f"o_war_{selected_rot_abbr}_{p['player']}",
-                        round(o_war_lookup.get(p["player"], 0.0), 6),
+                    "Act O WAR/40": round(o_war_lookup.get(p["player"], 0.0), 3),
+                    "Cust O WAR/40": float(st.session_state.get(
+                        f"o_war40_{selected_rot_abbr}_{p['player']}",
+                        round(o_war_lookup.get(p["player"], 0.0), 3),
                     )),
-                    "Act D WAR/min": round(d_war_lookup.get(p["player"], 0.0), 6),
-                    "Cust D WAR/min": float(st.session_state.get(
-                        f"d_war_{selected_rot_abbr}_{p['player']}",
-                        round(d_war_lookup.get(p["player"], 0.0), 6),
+                    "Act D WAR/40": round(d_war_lookup.get(p["player"], 0.0), 3),
+                    "Cust D WAR/40": float(st.session_state.get(
+                        f"d_war40_{selected_rot_abbr}_{p['player']}",
+                        round(d_war_lookup.get(p["player"], 0.0), 3),
                     )),
+                    "Act WAR/40": round(
+                        o_war_lookup.get(p["player"], 0.0) + d_war_lookup.get(p["player"], 0.0), 3
+                    ),
                 }
                 for p in roster_players if "player" in p
             ],
-            key=lambda x: -(x["Act O WAR/min"] + x["Act D WAR/min"]),
+            key=lambda x: -x["Act WAR/40"],
         )
 
         if not editor_rows:
@@ -710,42 +716,43 @@ with tab_rotation:
             edited = st.data_editor(
                 editor_df,
                 column_config={
-                    "Player":           st.column_config.TextColumn("Player", disabled=True),
-                    "Pos":              st.column_config.TextColumn("Pos", disabled=True),
-                    "Actual MPG":       st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
-                    "Custom MPG":       st.column_config.NumberColumn(
+                    "Player":          st.column_config.TextColumn("Player", disabled=True),
+                    "Pos":             st.column_config.TextColumn("Pos", disabled=True),
+                    "Actual MPG":      st.column_config.NumberColumn("Actual MPG", disabled=True, format="%.1f"),
+                    "Custom MPG":      st.column_config.NumberColumn(
                         "Custom MPG", min_value=0.0, max_value=40.0, step=0.5, format="%.1f"
                     ),
-                    "Act O WAR/min":    st.column_config.NumberColumn("Act O WAR/min", disabled=True, format="%.6f"),
-                    "Cust O WAR/min":   st.column_config.NumberColumn(
-                        "Cust O WAR/min", min_value=-0.05, max_value=0.05, step=0.000001, format="%.6f",
-                        help="Offensive WAR per minute (LEBRON WAR/min, O share). Override if needed."
+                    "Act O WAR/40":    st.column_config.NumberColumn("Act O WAR/40", disabled=True, format="%.3f"),
+                    "Cust O WAR/40":   st.column_config.NumberColumn(
+                        "Cust O WAR/40", min_value=-2.0, max_value=2.0, step=0.001, format="%.3f",
+                        help="Offensive WAR per 40 minutes. Override if needed."
                     ),
-                    "Act D WAR/min":    st.column_config.NumberColumn("Act D WAR/min", disabled=True, format="%.6f"),
-                    "Cust D WAR/min":   st.column_config.NumberColumn(
-                        "Cust D WAR/min", min_value=-0.05, max_value=0.05, step=0.000001, format="%.6f",
-                        help="Defensive WAR per minute (LEBRON WAR/min, D share). Override if needed."
+                    "Act D WAR/40":    st.column_config.NumberColumn("Act D WAR/40", disabled=True, format="%.3f"),
+                    "Cust D WAR/40":   st.column_config.NumberColumn(
+                        "Cust D WAR/40", min_value=-2.0, max_value=2.0, step=0.001, format="%.3f",
+                        help="Defensive WAR per 40 minutes. Override if needed."
                     ),
+                    "Act WAR/40":      st.column_config.NumberColumn("Act WAR/40", disabled=True, format="%.3f"),
                 },
                 hide_index=True,
                 use_container_width=True,
                 num_rows="fixed",
             )
 
-            # Persist custom MPG and O/D WAR/min in session state.
+            # Persist custom MPG and O/D WAR/40 in session state.
             # Round to display precision so the stored value exactly matches the
             # formatted column value, keeping the metric and column sum in sync.
             for _, row in edited.iterrows():
                 st.session_state[f"rot_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Custom MPG"]), 1)
-                st.session_state[f"o_war_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust O WAR/min"]), 6)
-                st.session_state[f"d_war_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust D WAR/min"]), 6)
+                st.session_state[f"o_war40_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust O WAR/40"]), 3)
+                st.session_state[f"d_war40_{selected_rot_abbr}_{row['Player']}"] = round(float(row["Cust D WAR/40"]), 3)
 
             # ── WAR summary metrics ──────────────────────────────────────────
-            edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/min"] * SEASON_GAMES
-            edited["Proj D WAR"] = edited["Custom MPG"] * edited["Cust D WAR/min"] * SEASON_GAMES
+            edited["Proj O WAR"] = edited["Custom MPG"] * edited["Cust O WAR/40"] * SEASON_GAMES / 40
+            edited["Proj D WAR"] = edited["Custom MPG"] * edited["Cust D WAR/40"] * SEASON_GAMES / 40
             edited["Proj WAR"] = edited["Proj O WAR"] + edited["Proj D WAR"]
             actual_war = (
-                editor_df["Actual MPG"] * (editor_df["Act O WAR/min"] + editor_df["Act D WAR/min"]) * SEASON_GAMES
+                editor_df["Actual MPG"] * editor_df["Act WAR/40"] * SEASON_GAMES / 40
             ).sum()
             custom_war = edited["Proj WAR"].sum()
             custom_o_war = edited["Proj O WAR"].sum()
@@ -766,7 +773,7 @@ with tab_rotation:
             )
 
             st.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
-            st.caption("Proj WAR = Custom MPG × (Cust O WAR/min + Cust D WAR/min) × 40 games. Changes flow into simulations on Save.")
+            st.caption("Proj WAR = Custom MPG × (Cust O WAR/40 + Cust D WAR/40) ÷ 40 × 44 games. Changes flow into simulations on Save.")
 
         st.divider()
 
@@ -812,5 +819,75 @@ with tab_rotation:
         st.caption(
             "Orange bars = teams with custom rotations set. "
             "Gray bars = baseline (actual MPG from LEBRON data). "
-            "Team WAR = Σ (WAR/MPG × Custom MPG) per player."
+            "Team WAR = Σ (WAR/40 × Custom MPG) per player ÷ 40."
+        )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — PLAYER RANKINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with tab_players:
+    st.markdown('<div class="section-header">🏅 Player Rankings</div>', unsafe_allow_html=True)
+    st.caption("Sorted by WAR/40. Ratings from LEBRON (Basketball Index).")
+
+    if not player_records:
+        st.info("Player rating data is not yet available.")
+    else:
+        # Build position lookup from rosters
+        pos_lookup: dict[str, str] = {}
+        for _team, _players in rosters_raw.items():
+            for _p in _players:
+                if "player" in _p:
+                    pos_lookup[_p["player"]] = _p.get("position", "")
+
+        ranking_rows = []
+        for r in player_records:
+            name = r["player"]
+            o40 = round(r.get("o_war_per_40", 0.0), 3)
+            d40 = round(r.get("d_war_per_40", 0.0), 3)
+            ranking_rows.append({
+                "Player": name,
+                "Team": r.get("team", ""),
+                "Pos": pos_lookup.get(name, ""),
+                "MPG": round(r["mpg"], 1),
+                "LEBRON WAR": round(r.get("lebron_war", 0.0), 2),
+                "O WAR/40": o40,
+                "D WAR/40": d40,
+                "WAR/40": round(o40 + d40, 3),
+            })
+
+        rankings_df = (
+            pd.DataFrame(ranking_rows)
+            .sort_values("WAR/40", ascending=False)
+            .reset_index(drop=True)
+        )
+        rankings_df.index += 1  # 1-based rank
+
+        # Team filter
+        team_filter_options = ["All Teams"] + sorted(
+            rankings_df["Team"].unique().tolist(),
+            key=lambda t: TEAM_NAMES.get(t, t),
+        )
+        selected_filter = st.selectbox(
+            "Filter by team",
+            options=team_filter_options,
+            label_visibility="collapsed",
+            key="player_rankings_team_filter",
+        )
+        if selected_filter != "All Teams":
+            display_rankings = rankings_df[rankings_df["Team"] == selected_filter]
+        else:
+            display_rankings = rankings_df
+
+        st.dataframe(
+            display_rankings,
+            use_container_width=True,
+            height=min(700, 36 + len(display_rankings) * 35),
+            column_config={
+                "MPG":        st.column_config.NumberColumn("MPG", format="%.1f"),
+                "LEBRON WAR": st.column_config.NumberColumn("LEBRON WAR", format="%.2f"),
+                "O WAR/40":   st.column_config.NumberColumn("O WAR/40", format="%.3f"),
+                "D WAR/40":   st.column_config.NumberColumn("D WAR/40", format="%.3f"),
+                "WAR/40":     st.column_config.NumberColumn("WAR/40", format="%.3f"),
+            },
         )

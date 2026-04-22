@@ -7,6 +7,7 @@ Run with: streamlit run app.py
 import base64
 import io
 import json
+import unicodedata
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,11 @@ from fetch_data import (
     get_team_logo,
     prefetch_all_logos,
 )
+def _norm(name: str) -> str:
+    """Strip accents for accent-insensitive name matching."""
+    return unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+
+
 from model import (
     SimResults,
     get_next_gamedays,
@@ -266,9 +272,9 @@ def _compute_effective_team_war(
     if not player_records:
         return baseline
 
-    o_lbr_lookup = {r["player"]: r.get("o_lebron", 0.0) for r in player_records}
-    d_lbr_lookup = {r["player"]: r.get("d_lebron", 0.0) for r in player_records}
-    mpg_lookup   = {r["player"]: r["mpg"] for r in player_records}
+    o_lbr_lookup = {_norm(r["player"]): r.get("o_lebron", 0.0) for r in player_records}
+    d_lbr_lookup = {_norm(r["player"]): r.get("d_lebron", 0.0) for r in player_records}
+    mpg_lookup   = {_norm(r["player"]): r["mpg"] for r in player_records}
 
     all_teams = set(baseline.keys()) | set(rosters_raw.keys())
     effective = {}
@@ -278,15 +284,18 @@ def _compute_effective_team_war(
             effective[team] = baseline.get(team, 0.0)
             continue
 
-        has_lebron = any((o_lbr_lookup.get(p, 0.0) + d_lbr_lookup.get(p, 0.0)) != 0 for p in players)
+        has_lebron = any(
+            (o_lbr_lookup.get(_norm(p), 0.0) + d_lbr_lookup.get(_norm(p), 0.0)) != 0
+            for p in players
+        )
         if not has_lebron:
             effective[team] = baseline.get(team, 0.0)
             continue
 
         lbr_total = sum(
-            (st.session_state.get(f"o_lbr_{team}_{p}", o_lbr_lookup.get(p, 0.0))
-             + st.session_state.get(f"d_lbr_{team}_{p}", d_lbr_lookup.get(p, 0.0)))
-            * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(p, 0.0))
+            (st.session_state.get(f"o_lbr_{team}_{p}", o_lbr_lookup.get(_norm(p), 0.0))
+             + st.session_state.get(f"d_lbr_{team}_{p}", d_lbr_lookup.get(_norm(p), 0.0)))
+            * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(_norm(p), 0.0))
             / 40
             for p in players
         )
@@ -619,9 +628,9 @@ with tab_rotation:
         st.info("Roster data not available.")
     else:
         # ── LEBRON lookup by player name ──────────────────────────────────────
-        o_lbr_lookup = {r["player"]: r.get("o_lebron", 0.0) for r in player_records}
-        d_lbr_lookup = {r["player"]: r.get("d_lebron", 0.0) for r in player_records}
-        mpg_lookup   = {r["player"]: r["mpg"] for r in player_records}
+        o_lbr_lookup = {_norm(r["player"]): r.get("o_lebron", 0.0) for r in player_records}
+        d_lbr_lookup = {_norm(r["player"]): r.get("d_lebron", 0.0) for r in player_records}
+        mpg_lookup   = {_norm(r["player"]): r["mpg"] for r in player_records}
 
         # ── Team selector ────────────────────────────────────────────────────
         # Union of roster data and all known teams so expansion teams always appear
@@ -668,20 +677,20 @@ with tab_rotation:
                 {
                     "Player":      p["player"],
                     "Pos":         p.get("position", ""),
-                    "Actual MPG":  round(mpg_lookup.get(p["player"], 0.0), 1),
+                    "Actual MPG":  round(mpg_lookup.get(_norm(p["player"]), 0.0), 1),
                     "Custom MPG":  float(st.session_state.get(
                         f"rot_{selected_rot_abbr}_{p['player']}",
-                        round(mpg_lookup.get(p["player"], 0.0), 1),
+                        round(mpg_lookup.get(_norm(p["player"]), 0.0), 1),
                     )),
-                    "Act O-LBR":  round(o_lbr_lookup.get(p["player"], 0.0), 2),
+                    "Act O-LBR":  round(o_lbr_lookup.get(_norm(p["player"]), 0.0), 2),
                     "Cust O-LBR": float(st.session_state.get(
                         f"o_lbr_{selected_rot_abbr}_{p['player']}",
-                        round(o_lbr_lookup.get(p["player"], 0.0), 2),
+                        round(o_lbr_lookup.get(_norm(p["player"]), 0.0), 2),
                     )),
-                    "Act D-LBR":  round(d_lbr_lookup.get(p["player"], 0.0), 2),
+                    "Act D-LBR":  round(d_lbr_lookup.get(_norm(p["player"]), 0.0), 2),
                     "Cust D-LBR": float(st.session_state.get(
                         f"d_lbr_{selected_rot_abbr}_{p['player']}",
-                        round(d_lbr_lookup.get(p["player"], 0.0), 2),
+                        round(d_lbr_lookup.get(_norm(p["player"]), 0.0), 2),
                     )),
                 }
                 for p in roster_players if "player" in p
@@ -807,7 +816,7 @@ with tab_players:
         for _team, _players in rosters_raw.items():
             for _p in _players:
                 if "player" in _p:
-                    pos_lookup[_p["player"]] = _p.get("position", "")
+                    pos_lookup[_norm(_p["player"])] = _p.get("position", "")
 
         ranking_rows = []
         for r in player_records:
@@ -815,7 +824,7 @@ with tab_players:
             ranking_rows.append({
                 "Player":    name,
                 "Team":      r.get("team", ""),
-                "Pos":       pos_lookup.get(name, ""),
+                "Pos":       pos_lookup.get(_norm(name), ""),
                 "Minutes":   int(r.get("minutes", 0)),
                 "MPG":       round(r["mpg"], 1),
                 "O-LEBRON":  round(r.get("o_lebron", 0.0), 2),

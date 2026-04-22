@@ -187,16 +187,17 @@ def load_player_lebron_data() -> list[dict]:
     df["war_per_min"] = df.apply(
         lambda r: r["lebron_war"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
     )
-    # Split into offensive and defensive per-minute rates using O/D-LEBRON proportions
+    # O/D WAR rates computed directly from o_lebron and d_lebron WAR values.
+    # Dividing each by minutes gives the per-minute rate; ×40 gives per-40.
+    # (Not derived from war_per_min × ratio, which would require lebron_war == o+d.)
     df["o_lebron"] = pd.to_numeric(df.get("o_lebron", 0), errors="coerce").fillna(0)
     df["d_lebron"] = pd.to_numeric(df.get("d_lebron", 0), errors="coerce").fillna(0)
-    def _split_war(r):
-        total = r["o_lebron"] + r["d_lebron"]
-        o_ratio = r["o_lebron"] / total if total != 0 else 0.5
-        o = round(r["war_per_min"] * o_ratio, 6)
-        d = round(r["war_per_min"] - o, 6)
-        return pd.Series({"o_war_per_min": o, "d_war_per_min": d})
-    df[["o_war_per_min", "d_war_per_min"]] = df.apply(_split_war, axis=1)
+    df["o_war_per_min"] = df.apply(
+        lambda r: r["o_lebron"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
+    )
+    df["d_war_per_min"] = df.apply(
+        lambda r: r["d_lebron"] / r["minutes"] if r["minutes"] > 0 else 0.0, axis=1
+    )
     df["o_war_per_40"] = (df["o_war_per_min"] * 40).round(3)
     df["d_war_per_40"] = (df["d_war_per_min"] * 40).round(3)
     return df[["player", "team", "minutes", "mpg", "lebron_war", "war_per_min",

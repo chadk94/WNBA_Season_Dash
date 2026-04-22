@@ -1,0 +1,17 @@
+# Cache and fetched data
+data/logos/
+data/*.json
+!data/rosters_2026.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Streamlit
+.streamlit/
+
+# IDE
+.idea/
+.vscode/

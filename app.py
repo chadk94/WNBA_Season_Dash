@@ -25,7 +25,14 @@ from fetch_data import (
     prefetch_all_logos,
 )
 def _norm(name: str) -> str:
-    """Strip accents for accent-insensitive name matching."""
+    """Strip accents for accent-insensitive name matching.
+    Also repairs UTF-8 mojibake (UTF-8 bytes misread as Latin-1) before stripping."""
+    try:
+        # If the string was decoded as Latin-1 when it should be UTF-8,
+        # re-encoding as Latin-1 gives back the original bytes, then UTF-8 decode fixes it.
+        name = name.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
     return unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
 
 

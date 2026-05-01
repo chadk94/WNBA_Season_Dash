@@ -897,7 +897,7 @@ with tab_players:
 
         rankings_df = (
             pd.DataFrame(ranking_rows)
-            .sort_values("LEBRON", ascending=False)
+            .sort_values("Cust LEBRON", ascending=False)
             .reset_index(drop=True)
         )
         rankings_df.index += 1  # 1-based rank

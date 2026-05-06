@@ -855,30 +855,34 @@ with tab_players:
     if not player_records:
         st.info("Player rating data is not yet available.")
     else:
-        # Build position and team lookups from rosters (authoritative source)
+        # Build position, team, and display-name lookups from rosters (authoritative source)
         pos_lookup: dict[str, str] = {}
         roster_team_lookup: dict[str, str] = {}
+        roster_name_lookup: dict[str, str] = {}  # normalized key -> clean roster name for display
         for _team, _players in rosters_raw.items():
             for _p in _players:
                 if "player" in _p:
                     _key = _norm(_p["player"])
                     pos_lookup[_key] = _p.get("position", "")
                     roster_team_lookup[_key] = _team
+                    roster_name_lookup[_key] = _p["player"]
 
         ranking_rows = []
         for r in player_records:
             name = r["player"]
-            team = roster_team_lookup.get(_norm(name), r.get("team", ""))
+            key_name = _norm(name)  # normalize to match Rotation Builder session state keys
+            display_name = roster_name_lookup.get(key_name, name)  # use clean roster name
+            team = roster_team_lookup.get(key_name, r.get("team", ""))
             act_o = round(r.get("o_lebron", 0.0), 2)
             act_d = round(r.get("d_lebron", 0.0), 2)
-            cust_o = round(st.session_state.get(f"o_lbr_{team}_{name}", act_o), 2)
-            cust_d = round(st.session_state.get(f"d_lbr_{team}_{name}", act_d), 2)
+            cust_o = round(st.session_state.get(f"o_lbr_{team}_{key_name}", act_o), 2)
+            cust_d = round(st.session_state.get(f"d_lbr_{team}_{key_name}", act_d), 2)
             act_mpg = round(r["mpg"], 1)
-            cust_mpg = round(st.session_state.get(f"rot_{team}_{name}", act_mpg), 1)
+            cust_mpg = round(st.session_state.get(f"rot_{team}_{key_name}", act_mpg), 1)
             ranking_rows.append({
-                "Player":      name,
+                "Player":      display_name,
                 "Team":        team,
-                "Pos":         pos_lookup.get(_norm(name), ""),
+                "Pos":         pos_lookup.get(key_name, ""),
                 "Minutes":     int(r.get("minutes", 0)),
                 "MPG":         act_mpg,
                 "Cust MPG":    cust_mpg,
@@ -890,7 +894,7 @@ with tab_players:
                 "Cust LEBRON": round(cust_o + cust_d, 2),
                 "Last Edited": (
                     datetime.fromtimestamp(ts).strftime("%b %d %H:%M")
-                    if (ts := st.session_state.get(f"ts_{team}_{name}"))
+                    if (ts := st.session_state.get(f"ts_{team}_{key_name}"))
                     else ""
                 ),
             })

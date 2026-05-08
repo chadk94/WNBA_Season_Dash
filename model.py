@@ -120,10 +120,10 @@ def win_prob_to_spread(home_win_prob: float) -> float:
     """
     Convert home win probability to a point spread from the home team's perspective.
     Negative = home team is favored. Positive = away team is favored.
-    Uses ~3% per point approximation common in sports modeling.
-    e.g. 66.8% home → -5.6 (home favored), 50% → 0 (pick 'em), 33.2% → +5.6 (away favored)
+    Uses ~2.5% per point (wider than NBA to reflect larger WNBA talent disparities).
+    e.g. 50% → 0 (pick 'em), 96.6% → -18.6 (max realistic with ~21pt WAR gap)
     """
-    return -(home_win_prob - 0.5) * 33.3
+    return -(home_win_prob - 0.5) * 40.0
 
 
 def lebron_to_spread(home_lebron: float, away_lebron: float, is_home: bool = True) -> float:

@@ -377,45 +377,47 @@ with tab_season:
             st.subheader(pd.to_datetime(game_date).strftime("%A, %B %#d, %Y"))
             day_games = schedule_df[schedule_df["date"] == game_date]
 
-            cols = st.columns(min(len(day_games), 3))
-            for i, (_, game) in enumerate(day_games.iterrows()):
-                col = cols[i % len(cols)]
-                home = game["home_team"]
-                away = game["away_team"]
-                home_lbr = effective_team_war.get(home, 0.0)
-                away_lbr = effective_team_war.get(away, 0.0)
-                home_wp = win_probability(home_lbr, away_lbr)
-                away_wp = 1.0 - home_wp
-                spread = win_prob_to_spread(home_wp)
-                home_favored = home_wp >= 0.5
+            game_list = list(day_games.iterrows())
+            for row_start in range(0, len(game_list), 3):
+                row_games = game_list[row_start:row_start + 3]
+                cols = st.columns(len(row_games))
+                for col, (_, game) in zip(cols, row_games):
+                    home = game["home_team"]
+                    away = game["away_team"]
+                    home_lbr = effective_team_war.get(home, 0.0)
+                    away_lbr = effective_team_war.get(away, 0.0)
+                    home_wp = win_probability(home_lbr, away_lbr)
+                    away_wp = 1.0 - home_wp
+                    spread = win_prob_to_spread(home_wp)
+                    home_favored = home_wp >= 0.5
 
-                with col:
-                    with st.container(border=True):
-                        lc, mc, rc = st.columns([2, 1, 2])
-                        with lc:
-                            img = logo_image(away, 50)
-                            if img:
-                                st.image(img, width=50)
-                            away_name = TEAM_NAMES.get(away, away)
-                            st.markdown(f"**{away_name}**" if not home_favored else away_name)
-                            st.markdown(f"{'🟢' if not home_favored else ''} **{away_wp:.0%}**")
-                        with mc:
-                            st.markdown("<br><div style='text-align:center;font-size:1.2rem'>@</div>",
-                                        unsafe_allow_html=True)
-                        with rc:
-                            img = logo_image(home, 50)
-                            if img:
-                                st.image(img, width=50)
-                            home_name = TEAM_NAMES.get(home, home)
-                            st.markdown(f"**{home_name}**" if home_favored else home_name)
-                            st.markdown(f"{'🟢' if home_favored else ''} **{home_wp:.0%}**")
+                    with col:
+                        with st.container(border=True):
+                            lc, mc, rc = st.columns([2, 1, 2])
+                            with lc:
+                                img = logo_image(away, 50)
+                                if img:
+                                    st.image(img, width=50)
+                                away_name = TEAM_NAMES.get(away, away)
+                                st.markdown(f"**{away_name}**" if not home_favored else away_name)
+                                st.markdown(f"{'🟢' if not home_favored else ''} **{away_wp:.0%}**")
+                            with mc:
+                                st.markdown("<br><div style='text-align:center;font-size:1.2rem'>@</div>",
+                                            unsafe_allow_html=True)
+                            with rc:
+                                img = logo_image(home, 50)
+                                if img:
+                                    st.image(img, width=50)
+                                home_name = TEAM_NAMES.get(home, home)
+                                st.markdown(f"**{home_name}**" if home_favored else home_name)
+                                st.markdown(f"{'🟢' if home_favored else ''} **{home_wp:.0%}**")
 
-                        if abs(spread) < 0.5:
-                            st.caption("Pick 'em")
-                        elif home_favored:
-                            st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}")
-                        else:
-                            st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}")
+                            if abs(spread) < 0.5:
+                                st.caption("Pick 'em")
+                            elif home_favored:
+                                st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}")
+                            else:
+                                st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}")
 
     st.divider()
 

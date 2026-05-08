@@ -9,8 +9,8 @@ from typing import Optional
 
 # --- Tunable constants ---
 # k: how much a unit of LEBRON difference shifts the logit
-# Calibrated so that a 10-point team LEBRON WAR advantage ≈ 60% win probability
-K = 0.10
+# Calibrated so that a 21-point WAR gap (best vs. worst team) ≈ 97% win probability → -15.5 spread
+K = 0.15
 
 # Home court advantage in logit space (≈ +3.5% win probability for equal teams)
 HOME_ADV_LOGIT = 0.20

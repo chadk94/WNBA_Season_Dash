@@ -438,6 +438,53 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
     return rosters
 
 
+def get_team_stats(season: int) -> pd.DataFrame:
+    """
+    Fetch WNBA team ORtg/DRtg from nba_api LeagueDashTeamStats (Advanced).
+    Returns DataFrame with columns: team, ortg, drtg
+    Cached for CACHE_TTL_HOURS like other endpoints.
+    """
+    cache_key = f"team_stats_{season}"
+    cached = _load_cache(cache_key)
+    if cached:
+        return pd.DataFrame(cached)
+
+    season_str = f"{season}-{str(season + 1)[-2:]}"
+    STATIC_TO_TRICODE = {"PHO": "PHX", "NY": "NYL"}
+
+    try:
+        from nba_api.stats.endpoints import leaguedashteamstats
+        stats = leaguedashteamstats.LeagueDashTeamStats(
+            league_id_nullable="10",
+            season=season_str,
+            season_type_all_star="Regular Season",
+            measure_type_detailed_defense="Advanced",
+        )
+        df = stats.get_data_frames()[0]
+    except Exception as e:
+        print(f"[fetch_data] Team stats fetch failed for {season}: {e}")
+        return pd.DataFrame(columns=["team", "ortg", "drtg"])
+
+    if df.empty:
+        return pd.DataFrame(columns=["team", "ortg", "drtg"])
+
+    name_to_abbr = {v: k for k, v in TEAM_NAMES.items()}
+
+    rows = []
+    for _, row in df.iterrows():
+        name = str(row.get("TEAM_NAME", ""))
+        abbr = name_to_abbr.get(name, STATIC_TO_TRICODE.get(name.upper(), name.upper()))
+        ortg = float(row.get("E_OFF_RATING", row.get("OFF_RATING", 0)) or 0)
+        drtg = float(row.get("E_DEF_RATING", row.get("DEF_RATING", 0)) or 0)
+        if ortg and drtg:
+            rows.append({"team": abbr, "ortg": ortg, "drtg": drtg})
+
+    result = pd.DataFrame(rows)
+    if not result.empty:
+        _save_cache(cache_key, result.to_dict(orient="records"))
+    return result
+
+
 def get_team_logo(team_abbr: str) -> Path | None:
     """
     Fetch and cache team logo PNG from ESPN CDN.

@@ -23,6 +23,7 @@ from fetch_data import (
     get_team_rosters,
     get_player_lebron,
     get_team_logo,
+    get_team_stats,
     prefetch_all_logos,
 )
 def _norm(name: str) -> str:
@@ -314,9 +315,36 @@ def _compute_effective_team_war(
     return effective
 
 
-# Scale: 1 unit of team O/D-LEBRON above league avg ≈ this many ORtg/DRtg points
-_ORTG_SCALE = 1.5
-_DRTG_SCALE = 1.5
+_ORTG_SCALE_FALLBACK = 1.5
+_DRTG_SCALE_FALLBACK = 1.5
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_prev_team_stats() -> pd.DataFrame:
+    return get_team_stats(SEASON - 1)
+
+
+def _calibrate_scales(team_o: dict, team_d: dict) -> tuple[float, float]:
+    """
+    Set scale factors so the synthetic ORtg/DRtg spread matches last year's actual spread.
+    scale = std(ORtg_prev) / std(O-LBR_current)
+    Falls back to hardcoded defaults if data is unavailable or spread is near zero.
+    """
+    prev_stats = load_prev_team_stats()
+    if prev_stats.empty or len(prev_stats) < 4:
+        return _ORTG_SCALE_FALLBACK, _DRTG_SCALE_FALLBACK
+
+    ortg_std = float(prev_stats["ortg"].std())
+    drtg_std = float(prev_stats["drtg"].std())
+
+    o_vals = [v for v in team_o.values() if v != 0]
+    d_vals = [v for v in team_d.values() if v != 0]
+    o_lbr_std = float(pd.Series(o_vals).std()) if len(o_vals) >= 4 else 0.0
+    d_lbr_std = float(pd.Series(d_vals).std()) if len(d_vals) >= 4 else 0.0
+
+    ortg_scale = ortg_std / o_lbr_std if o_lbr_std > 0.01 else _ORTG_SCALE_FALLBACK
+    drtg_scale = drtg_std / d_lbr_std if d_lbr_std > 0.01 else _DRTG_SCALE_FALLBACK
+    return ortg_scale, drtg_scale
 
 
 def _compute_effective_team_od(
@@ -349,21 +377,28 @@ def _compute_effective_team_od(
     return team_o, team_d
 
 
-def _build_team_ratings(team_o: dict, team_d: dict) -> dict[str, tuple[float, float]]:
+def _build_team_ratings(
+    team_o: dict,
+    team_d: dict,
+    ortg_scale: float | None = None,
+    drtg_scale: float | None = None,
+) -> dict[str, tuple[float, float]]:
     """
     Convert team O/D-LEBRON dicts to {team: (ortg, drtg)}.
-    Teams are shifted relative to the league average so the mean team projects to LEAGUE_AVG_ORTG.
+    Scales are calibrated from last year's ORtg/DRtg spread when available.
     Higher D-LEBRON → lower (better) DRtg.
     """
     if not team_o:
         return {}
+    if ortg_scale is None or drtg_scale is None:
+        ortg_scale, drtg_scale = _calibrate_scales(team_o, team_d)
     teams = set(team_o) | set(team_d)
     avg_o = sum(team_o.get(t, 0.0) for t in teams) / len(teams)
     avg_d = sum(team_d.get(t, 0.0) for t in teams) / len(teams)
     return {
         t: (
-            LEAGUE_AVG_ORTG + (team_o.get(t, avg_o) - avg_o) * _ORTG_SCALE,
-            LEAGUE_AVG_ORTG - (team_d.get(t, avg_d) - avg_d) * _DRTG_SCALE,
+            LEAGUE_AVG_ORTG + (team_o.get(t, avg_o) - avg_o) * ortg_scale,
+            LEAGUE_AVG_ORTG - (team_d.get(t, avg_d) - avg_d) * drtg_scale,
         )
         for t in teams
     }

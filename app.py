@@ -417,7 +417,7 @@ col_meta3.metric("Simulations", "1,000")
 
 st.divider()
 
-tab_season, tab_rosters, tab_rotation, tab_players = st.tabs(["Season Projections", "Rosters", "Rotation Builder", "Player Rankings"])
+tab_season, tab_teams, tab_rosters, tab_rotation, tab_players = st.tabs(["Season Projections", "Team Stats", "Rosters", "Rotation Builder", "Player Rankings"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — SEASON PROJECTIONS
@@ -618,7 +618,134 @@ with tab_season:
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — ROSTERS
+# TAB 2 — TEAM STATS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with tab_teams:
+    st.markdown('<div class="section-header">📊 League Standings</div>', unsafe_allow_html=True)
+
+    # Compute actual losses from completed games
+    _actual_losses: dict[str, int] = {}
+    for _, _row in schedule_df[schedule_df["status"] == "Final"].iterrows():
+        _hs, _as = _row.get("home_score"), _row.get("away_score")
+        if pd.notna(_hs) and pd.notna(_as):
+            if _hs > _as:
+                _actual_losses[_row["away_team"]] = _actual_losses.get(_row["away_team"], 0) + 1
+            else:
+                _actual_losses[_row["home_team"]] = _actual_losses.get(_row["home_team"], 0) + 1
+
+    _proj_wins_df   = sim_results.projected_wins
+    _playoff_df     = sim_results.playoff_odds
+    _pw_map         = {r["team"]: r for r in _proj_wins_df.to_dict("records")}
+    _po_map         = {r["team"]: r["playoff_pct"] for r in _playoff_df.to_dict("records")}
+    _ts_all_teams   = sorted(set(_proj_wins_df["team"]) | set(_team_o.keys()) | set(_team_d.keys()))
+
+    _ts_rows = []
+    for _t in _ts_all_teams:
+        _pw      = _pw_map.get(_t, {})
+        _act_w   = int(_pw.get("actual_wins", 0))
+        _act_l   = _actual_losses.get(_t, 0)
+        _med_w   = _pw.get("median_wins", 0.0)
+        _p10     = _pw.get("p10_wins", 0.0)
+        _p90     = _pw.get("p90_wins", 0.0)
+        _po_pct  = _po_map.get(_t, 0.0)
+        _o_lbr   = round(_team_o.get(_t, 0.0), 2)
+        _d_lbr   = round(_team_d.get(_t, 0.0), 2)
+        _ortg, _drtg = team_ratings.get(_t, (LEAGUE_AVG_ORTG, LEAGUE_AVG_ORTG))
+        _ts_rows.append({
+            "Team":     TEAM_NAMES.get(_t, _t),
+            "W":        _act_w,
+            "L":        _act_l,
+            "Proj W":   round(_med_w, 1),
+            "P10–P90":  f"{_p10:.0f}–{_p90:.0f}",
+            "Playoff%": round(_po_pct, 1),
+            "O-LBR":    _o_lbr,
+            "D-LBR":    _d_lbr,
+            "ORtg":     round(_ortg, 1),
+            "DRtg":     round(_drtg, 1),
+        })
+
+    _ts_df = pd.DataFrame(_ts_rows).sort_values("Proj W", ascending=False).reset_index(drop=True)
+
+    st.dataframe(
+        _ts_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Team":     st.column_config.TextColumn("Team"),
+            "W":        st.column_config.NumberColumn("W", format="%d"),
+            "L":        st.column_config.NumberColumn("L", format="%d"),
+            "Proj W":   st.column_config.NumberColumn("Proj W", format="%.1f",
+                            help="Median projected wins (1,000 simulations)"),
+            "P10–P90":  st.column_config.TextColumn("P10–P90",
+                            help="10th–90th percentile win range"),
+            "Playoff%": st.column_config.ProgressColumn("Playoff%",
+                            min_value=0, max_value=100, format="%.1f%%"),
+            "O-LBR":    st.column_config.NumberColumn("O-LBR", format="%.2f",
+                            help="Projected team offensive LEBRON (MPG-weighted)"),
+            "D-LBR":    st.column_config.NumberColumn("D-LBR", format="%.2f",
+                            help="Projected team defensive LEBRON (MPG-weighted)"),
+            "ORtg":     st.column_config.NumberColumn("ORtg", format="%.1f",
+                            help="Projected offensive rating"),
+            "DRtg":     st.column_config.NumberColumn("DRtg", format="%.1f",
+                            help="Projected defensive rating (lower is better)"),
+        },
+    )
+    st.caption("Proj W = median simulated final wins. Playoff% = top-8 finish probability. O/D-LBR = MPG-weighted team LEBRON.")
+
+    st.divider()
+
+    # ── O/D LEBRON quadrant chart ─────────────────────────────────────────────
+    st.markdown('<div class="section-header">🎯 Offensive vs Defensive LEBRON</div>', unsafe_allow_html=True)
+
+    _scatter_teams = [t for t in _ts_all_teams if t in _team_o and t in _team_d]
+    if _scatter_teams:
+        _sx = [_team_o[t] for t in _scatter_teams]
+        _sy = [_team_d[t] for t in _scatter_teams]
+        _avg_o = sum(_sx) / len(_sx)
+        _avg_d = sum(_sy) / len(_sy)
+        _x_pad = max(abs(v - _avg_o) for v in _sx) * 0.15 + 0.1
+        _y_pad = max(abs(v - _avg_d) for v in _sy) * 0.15 + 0.1
+
+        _fig_quad = go.Figure()
+        _fig_quad.add_vline(x=_avg_o, line_dash="dash", line_color="#64748b", line_width=1)
+        _fig_quad.add_hline(y=_avg_d, line_dash="dash", line_color="#64748b", line_width=1)
+        _fig_quad.add_trace(go.Scatter(
+            x=_sx,
+            y=_sy,
+            mode="markers+text",
+            text=_scatter_teams,
+            textposition="top center",
+            marker=dict(size=12, color="#ff6b35", opacity=0.85),
+            hovertemplate="<b>%{text}</b><br>O-LBR: %{x:.2f}<br>D-LBR: %{y:.2f}<extra></extra>",
+        ))
+
+        _xmin, _xmax = min(_sx) - _x_pad, max(_sx) + _x_pad
+        _ymin, _ymax = min(_sy) - _y_pad, max(_sy) + _y_pad
+        _quad_font = dict(color="#64748b", size=11)
+        for _tx, _ty, _ta, _label in [
+            (_xmax, _ymax, ("right", "top"),    "Elite"),
+            (_xmin, _ymax, ("left",  "top"),    "Good D / Weak O"),
+            (_xmax, _ymin, ("right", "bottom"), "Good O / Weak D"),
+            (_xmin, _ymin, ("left",  "bottom"), "Rebuild"),
+        ]:
+            _fig_quad.add_annotation(
+                x=_tx, y=_ty, text=_label, showarrow=False,
+                font=_quad_font, xanchor=_ta[0], yanchor=_ta[1],
+            )
+
+        _fig_quad.update_layout(
+            xaxis=dict(title="O-LEBRON (higher = better offense)", range=[_xmin, _xmax]),
+            yaxis=dict(title="D-LEBRON (higher = better defense)", range=[_ymin, _ymax]),
+            height=520,
+            margin=dict(l=60, r=40, t=20, b=60),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(_fig_quad, use_container_width=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — ROSTERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_rosters:
@@ -680,7 +807,7 @@ with tab_rosters:
             st.caption(f"{len(roster_df)} players on roster")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — ROTATION BUILDER
+# TAB 4 — ROTATION BUILDER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_rotation:
@@ -927,7 +1054,7 @@ with tab_rotation:
         )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — PLAYER RANKINGS
+# TAB 5 — PLAYER RANKINGS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_players:

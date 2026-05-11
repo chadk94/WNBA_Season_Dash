@@ -139,8 +139,8 @@ def get_schedule(season: int = 2026) -> pd.DataFrame:
             "date": pd.to_datetime(row["gameDate"]).strftime("%Y-%m-%d"),
             "home_team": home,
             "away_team": away,
-            "home_score": int(home_score) if pd.notna(home_score) and home_score != "" else None,
-            "away_score": int(away_score) if pd.notna(away_score) and away_score != "" else None,
+            "home_score": int(home_score) if game_status >= 2 and pd.notna(home_score) and home_score != "" and int(home_score) > 0 else None,
+            "away_score": int(away_score) if game_status >= 2 and pd.notna(away_score) and away_score != "" and int(away_score) > 0 else None,
             "status": status,
         })
 

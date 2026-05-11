@@ -180,7 +180,7 @@ def simulate_season(
     actual_wins = {t: 0 for t in all_teams}
     completed = schedule_df[schedule_df["status"] == "Final"]
     for _, row in completed.iterrows():
-        if row["home_score"] is not None and row["away_score"] is not None:
+        if pd.notna(row["home_score"]) and pd.notna(row["away_score"]):
             if row["home_score"] > row["away_score"]:
                 actual_wins[row["home_team"]] = actual_wins.get(row["home_team"], 0) + 1
             else:

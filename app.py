@@ -846,21 +846,37 @@ with tab_rotation:
             # ── Team LEBRON metrics ──────────────────────────────────────────
             edited["Cust LEBRON"] = edited["Cust O-LBR"] + edited["Cust D-LBR"]
             edited["Proj LEBRON"] = edited["Cust LEBRON"] * edited["Custom MPG"] / 40
-            actual_lebron = ((editor_df["Act O-LBR"] + editor_df["Act D-LBR"]) * editor_df["Actual MPG"] / 40).sum()
-            custom_lebron = edited["Proj LEBRON"].sum()
+            edited["Proj O-LBR"]  = edited["Cust O-LBR"] * edited["Custom MPG"] / 40
+            edited["Proj D-LBR"]  = edited["Cust D-LBR"] * edited["Custom MPG"] / 40
+            actual_lebron   = ((editor_df["Act O-LBR"] + editor_df["Act D-LBR"]) * editor_df["Actual MPG"] / 40).sum()
+            actual_o_lebron = (editor_df["Act O-LBR"] * editor_df["Actual MPG"] / 40).sum()
+            actual_d_lebron = (editor_df["Act D-LBR"] * editor_df["Actual MPG"] / 40).sum()
+            custom_lebron   = edited["Proj LEBRON"].sum()
+            custom_o_lebron = edited["Proj O-LBR"].sum()
+            custom_d_lebron = edited["Proj D-LBR"].sum()
 
-            mc1, mc2, mc3 = st.columns(3)
+            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
             mc1.metric(
+                "Proj O-LEBRON",
+                f"{custom_o_lebron:.2f}",
+                delta=f"{custom_o_lebron - actual_o_lebron:+.2f} vs baseline",
+            )
+            mc2.metric(
+                "Proj D-LEBRON",
+                f"{custom_d_lebron:.2f}",
+                delta=f"{custom_d_lebron - actual_d_lebron:+.2f} vs baseline",
+            )
+            mc3.metric(
                 "Proj Team LEBRON",
                 f"{custom_lebron:.2f}",
                 delta=f"{custom_lebron - actual_lebron:+.2f} vs baseline",
             )
-            mc2.metric(
+            mc4.metric(
                 "Total Custom MPG",
                 f"{edited['Custom MPG'].round(1).sum():.1f}",
                 delta=f"{edited['Custom MPG'].round(1).sum() - editor_df['Actual MPG'].sum():+.1f} vs actual",
             )
-            mc3.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
+            mc5.metric("Players in Rotation", len(edited[edited["Custom MPG"] > 0]))
             st.caption("Proj LEBRON = Σ ((Cust O-LBR + Cust D-LBR) × Custom MPG ÷ 40). Changes flow into simulations on Save.")
 
         st.divider()

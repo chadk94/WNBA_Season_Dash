@@ -126,7 +126,7 @@ def win_prob_to_spread(home_win_prob: float) -> float:
     return -(home_win_prob - 0.5) * 40.0
 
 
-LEAGUE_AVG_ORTG = 82.0  # WNBA avg team points per game
+LEAGUE_AVG_ORTG = 87.5  # WNBA avg team points per game
 
 
 def project_game_total(

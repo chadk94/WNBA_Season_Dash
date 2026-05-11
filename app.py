@@ -38,8 +38,10 @@ def _norm(name: str) -> str:
 
 
 from model import (
+    LEAGUE_AVG_ORTG,
     SimResults,
     get_next_gamedays,
+    project_game_total,
     simulate_season,
     win_probability,
     win_prob_to_spread,
@@ -312,6 +314,61 @@ def _compute_effective_team_war(
     return effective
 
 
+# Scale: 1 unit of team O/D-LEBRON above league avg ≈ this many ORtg/DRtg points
+_ORTG_SCALE = 1.5
+_DRTG_SCALE = 1.5
+
+
+def _compute_effective_team_od(
+    player_records: list[dict],
+    rosters_raw: dict,
+) -> tuple[dict, dict]:
+    """
+    Separate effective O-LEBRON and D-LEBRON per team (weighted by custom MPG).
+    Returns (team_o_dict, team_d_dict).
+    """
+    o_lbr_lookup = {_norm(r["player"]): r.get("o_lebron", 0.0) for r in player_records}
+    d_lbr_lookup = {_norm(r["player"]): r.get("d_lebron", 0.0) for r in player_records}
+    mpg_lookup   = {_norm(r["player"]): r["mpg"] for r in player_records}
+
+    team_o, team_d = {}, {}
+    for team, players_list in rosters_raw.items():
+        players = [p["player"] for p in players_list if "player" in p]
+        team_o[team] = sum(
+            st.session_state.get(f"o_lbr_{team}_{p}", o_lbr_lookup.get(_norm(p), 0.0))
+            * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(_norm(p), 0.0))
+            / 40
+            for p in players
+        )
+        team_d[team] = sum(
+            st.session_state.get(f"d_lbr_{team}_{p}", d_lbr_lookup.get(_norm(p), 0.0))
+            * st.session_state.get(f"rot_{team}_{p}", mpg_lookup.get(_norm(p), 0.0))
+            / 40
+            for p in players
+        )
+    return team_o, team_d
+
+
+def _build_team_ratings(team_o: dict, team_d: dict) -> dict[str, tuple[float, float]]:
+    """
+    Convert team O/D-LEBRON dicts to {team: (ortg, drtg)}.
+    Teams are shifted relative to the league average so the mean team projects to LEAGUE_AVG_ORTG.
+    Higher D-LEBRON → lower (better) DRtg.
+    """
+    if not team_o:
+        return {}
+    teams = set(team_o) | set(team_d)
+    avg_o = sum(team_o.get(t, 0.0) for t in teams) / len(teams)
+    avg_d = sum(team_d.get(t, 0.0) for t in teams) / len(teams)
+    return {
+        t: (
+            LEAGUE_AVG_ORTG + (team_o.get(t, avg_o) - avg_o) * _ORTG_SCALE,
+            LEAGUE_AVG_ORTG - (team_d.get(t, avg_d) - avg_d) * _DRTG_SCALE,
+        )
+        for t in teams
+    }
+
+
 # ── Load Data ────────────────────────────────────────────────────────────────
 
 schedule_df = load_schedule()
@@ -338,6 +395,9 @@ if "rotation_file_loaded" not in st.session_state:
     st.session_state["rotation_file_loaded"] = True
 
 effective_team_war = _compute_effective_team_war(player_records, rosters_raw, team_lebron)
+
+_team_o, _team_d = _compute_effective_team_od(player_records, rosters_raw)
+team_ratings = _build_team_ratings(_team_o, _team_d)
 
 sim_results = load_simulation(
     schedule_df.to_json(orient="records"),
@@ -391,6 +451,10 @@ with tab_season:
                 spread = win_prob_to_spread(home_wp)
                 home_favored = home_wp >= 0.5
 
+                home_ortg, home_drtg = team_ratings.get(home, (LEAGUE_AVG_ORTG, LEAGUE_AVG_ORTG))
+                away_ortg, away_drtg = team_ratings.get(away, (LEAGUE_AVG_ORTG, LEAGUE_AVG_ORTG))
+                proj_total = project_game_total(home_ortg, home_drtg, away_ortg, away_drtg)
+
                 with col:
                     with st.container(border=True):
                         lc, mc, rc = st.columns([2, 1, 2])
@@ -413,11 +477,11 @@ with tab_season:
                             st.markdown(f"{'🟢' if home_favored else ''} **{home_wp:.0%}**")
 
                         if abs(spread) < 0.5:
-                            st.caption("Pick 'em")
+                            st.caption(f"Pick 'em  |  O/U: {proj_total:.1f}")
                         elif home_favored:
-                            st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}")
+                            st.caption(f"Spread: {home_name} **{spread:.1f}** / {away_name} +{abs(spread):.1f}  |  O/U: {proj_total:.1f}")
                         else:
-                            st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}")
+                            st.caption(f"Spread: {away_name} **{-abs(spread):.1f}** / {home_name} +{abs(spread):.1f}  |  O/U: {proj_total:.1f}")
 
     st.divider()
 

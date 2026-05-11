@@ -126,6 +126,24 @@ def win_prob_to_spread(home_win_prob: float) -> float:
     return -(home_win_prob - 0.5) * 40.0
 
 
+LEAGUE_AVG_ORTG = 82.0  # WNBA avg team points per game
+
+
+def project_game_total(
+    home_ortg: float,
+    home_drtg: float,
+    away_ortg: float,
+    away_drtg: float,
+) -> float:
+    """
+    Project combined game total from team ORtg/DRtg.
+    Formula: each team's expected score = their ORtg adjusted for opponent DRtg vs league avg.
+    """
+    home_exp = home_ortg + (away_drtg - LEAGUE_AVG_ORTG)
+    away_exp = away_ortg + (home_drtg - LEAGUE_AVG_ORTG)
+    return round(home_exp + away_exp, 1)
+
+
 def lebron_to_spread(home_lebron: float, away_lebron: float, is_home: bool = True) -> float:
     """
     Convenience: compute spread from LEBRON values directly (includes home court).

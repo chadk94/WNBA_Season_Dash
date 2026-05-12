@@ -441,7 +441,21 @@ sim_results = load_simulation(
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
-st.title("🏀 WNBA 2026 Season Dashboard")
+title_col, refresh_col = st.columns([8, 1])
+title_col.title("🏀 WNBA 2026 Season Dashboard")
+with refresh_col:
+    st.write("")  # vertical spacing to align with title baseline
+    if st.button("🔄 Refresh Data", help="Clear all caches and re-fetch schedule, rosters, and ratings from source"):
+        for _cache_file in Path("data").glob("*.json"):
+            if _cache_file.name not in ("rotations.json", "custom_rotation.json", "lebron_manual.csv"):
+                _cache_file.unlink(missing_ok=True)
+        load_schedule.clear()
+        load_rosters.clear()
+        load_player_lebron_data.clear()
+        load_simulation.clear()
+        load_prev_team_stats.clear()
+        st.rerun()
+
 col_meta1, col_meta2, col_meta3 = st.columns(3)
 completed = (schedule_df["status"] == "Final").sum()
 total_games = len(schedule_df)

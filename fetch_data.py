@@ -81,9 +81,20 @@ def _load_cache(name: str):
     return None
 
 
+def _nan_to_null(obj):
+    """Recursively replace float NaN with None so json.dump writes null, not NaN."""
+    if isinstance(obj, list):
+        return [_nan_to_null(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _nan_to_null(v) for k, v in obj.items()}
+    if isinstance(obj, float) and obj != obj:  # NaN != NaN
+        return None
+    return obj
+
+
 def _save_cache(name: str, data):
     with open(_cache_path(name), "w") as f:
-        json.dump(data, f)
+        json.dump(_nan_to_null(data), f)
 
 
 def get_schedule(season: int = 2026) -> pd.DataFrame:

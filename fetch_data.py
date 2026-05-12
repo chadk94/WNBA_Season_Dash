@@ -349,12 +349,24 @@ def get_team_lebron(player_df: pd.DataFrame = None, rosters: dict = None) -> dic
     return df.groupby("team")["lebron"].mean().to_dict()
 
 
+_ROSTER_URL = "https://stats.nba.com/stats/commonteamroster"
+_ROSTER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://www.nba.com/",
+    "Accept": "application/json",
+}
+
+
 def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
     """
-    Fetch the roster for every WNBA team via nba_api.
+    Fetch the roster for every WNBA team via direct stats.nba.com request.
     Returns {team_abbr: DataFrame} where each DataFrame has columns:
       player_id, player, num, position, height, weight, birth_date,
-      age, experience, school
+      age, experience, school, how_acquired
     Results are cached in data/rosters_<season>.json for 24 hours.
     """
     cache_key = f"rosters_{season}"
@@ -376,18 +388,15 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
 
     try:
         from nba_api.stats.static import teams as static_teams
-        from nba_api.stats.endpoints import commonteamroster
     except ImportError as e:
         print(f"[fetch_data] nba_api not available: {e}")
         return {}
 
-    # Static abbreviations that differ from our tricodes
     STATIC_TO_TRICODE = {
         "PHO": "PHX",
         "NY":  "NYL",
     }
 
-    # Build tricode → team_id map from the static WNBA teams list
     known_teams = set(TEAM_LOGO_SLUGS.keys())
     team_id_map = {}
     for t in static_teams.get_wnba_teams():
@@ -400,45 +409,48 @@ def get_team_rosters(season: int = 2026) -> dict[str, pd.DataFrame]:
         print("[fetch_data] No WNBA teams found in static data.")
         return {}
 
-    # Fetch roster for each team; fall back to stale cache entry on failure
+    col_map = {
+        "PLAYER":       "player",
+        "PLAYER_ID":    "player_id",
+        "NUM":          "num",
+        "POSITION":     "position",
+        "HEIGHT":       "height",
+        "WEIGHT":       "weight",
+        "BIRTH_DATE":   "birth_date",
+        "AGE":          "age",
+        "EXP":          "experience",
+        "SCHOOL":       "school",
+        "HOW_ACQUIRED": "how_acquired",
+    }
+    keep_cols = ["player_id", "player", "num", "position", "height",
+                 "weight", "birth_date", "age", "experience", "school", "how_acquired"]
+
     rosters = {}
     for abbr, team_id in sorted(team_id_map.items()):
         try:
-            roster_ep = commonteamroster.CommonTeamRoster(
-                team_id=team_id,
-                season=season_str,
-                league_id_nullable="10",
+            resp = requests.get(
+                _ROSTER_URL,
+                params={"TeamID": team_id, "Season": season_str, "LeagueID": "10"},
+                headers=_ROSTER_HEADERS,
+                timeout=15,
             )
-            df = roster_ep.get_data_frames()[0]
+            resp.raise_for_status()
+            result_set = next(
+                rs for rs in resp.json()["resultSets"]
+                if rs["name"] == "CommonTeamRoster"
+            )
+            df = pd.DataFrame(result_set["rowSet"], columns=result_set["headers"])
             if df.empty:
                 raise ValueError("API returned empty roster")
-
-            col_map = {
-                "PLAYER":     "player",
-                "PLAYER_ID":  "player_id",
-                "NUM":        "num",
-                "POSITION":   "position",
-                "HEIGHT":     "height",
-                "WEIGHT":     "weight",
-                "BIRTH_DATE": "birth_date",
-                "AGE":        "age",
-                "EXP":        "experience",
-                "SCHOOL":     "school",
-                "HOW_ACQUIRED": "how_acquired",
-            }
             df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-            keep = [c for c in ["player_id", "player", "num", "position", "height",
-                                "weight", "birth_date", "age", "experience", "school",
-                                "how_acquired"] if c in df.columns]
-            rosters[abbr] = df[keep]
-            time.sleep(0.3)  # be polite to the API
+            rosters[abbr] = df[[c for c in keep_cols if c in df.columns]]
+            time.sleep(0.3)
         except Exception as e:
             print(f"[fetch_data] Roster fetch failed for {abbr}: {e}")
             if abbr in stale_cache and len(stale_cache[abbr]) > 0:
                 print(f"[fetch_data] Using stale cache for {abbr}")
                 rosters[abbr] = pd.DataFrame(stale_cache[abbr])
 
-    # Preserve any stale entries that still couldn't be fetched
     for abbr, rows in stale_cache.items():
         if abbr not in rosters and len(rows) > 0:
             print(f"[fetch_data] Preserving stale roster for {abbr}")

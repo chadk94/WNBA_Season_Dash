@@ -447,7 +447,11 @@ with refresh_col:
     st.write("")  # vertical spacing to align with title baseline
     if st.button("🔄 Refresh Data", help="Clear all caches and re-fetch schedule, rosters, and ratings from source"):
         for _cache_file in Path("data").glob("*.json"):
-            if _cache_file.name not in ("rotations.json", "custom_rotation.json", "lebron_manual.csv"):
+            # Preserve rotations and rosters — roster stale-cache fallback protects
+            # expansion teams (PDX/TOR) whose rosters aren't returned by the API on fresh fetch.
+            # Rosters still auto-refresh on the normal 24 h TTL cycle.
+            if _cache_file.name not in ("rotations.json", "custom_rotation.json", "lebron_manual.csv") \
+                    and not _cache_file.name.startswith("rosters_"):
                 _cache_file.unlink(missing_ok=True)
         load_schedule.clear()
         load_rosters.clear()
